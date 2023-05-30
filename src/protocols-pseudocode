@@ -1,0 +1,139 @@
+PRE INIT POSITION
+- B1-B4: placed on ground in rhomboid shape R
+- Dn: Placed on ground in interior of R, clear weather
+- DCS->Dn: >>init-trigger (flies up, stays in place, >>init)
+
+INIT POSITION		         Post-init Timeslot
+- Dn->B1: >>init
+- B1->B2: >>dist-calc		 I
+  - B2->B4: >>dist-calc		 II
+  - B2->B3: >>dist-calc		 III
+  - B2->Dn: >>dist-calc		 IV
+  - B2->B1: >>dist-calc-response IV
+- B1->B3: >>dist-calc		 II
+  - B3->Dn: >>dist-calc		 III
+  - B3->B4: >>dist-calc		 IV
+  - B3->B1: >>dist-calc-response IV	
+- B1->B4: >>dist-calc		 III
+  - B4->Dn: >>wait >>dist-calc	 V
+  - B4->B1: >>dist-calc-response V
+- B1->Dn: >>dist-calc		 IV
+  - B1->B2: >>dist-calc-response V
+  - B1->B3: >>dist-calc-response V
+  - B1->B4: >>dist-calc-response V
+- B1->Dn: >>dist-calc-response	 V
+- Dn->B1: >>clk-sync-init	 V	(in order that Dn wait for B1 response to move on)
+  - B1->B2,B3,B4,Dn: >>clk-sync	 V
+- Dn->B1: >>send-map		 VI*	( *: may be later depending on success of clk-sync alg)
+  - B1->B2,B3,B4: >>send-map	 VI*
+- Dn->DCS: >>init-complete	 VI*
+FLIGHT REGULAR
+- Dn->B1: >>flight-regular
+- B1,B2,B3,B4->Dn: >>triang
+FLIGHT ZERO
+FLIGHT AUTO
+
+init-trigger protocol DCS->Dn (digital control station and drone)
+- DCS->Dn init-trigger msg
+- Dn->DCS ack msg
+- Dn flies up and stays in place
+- Dn->B1 >>init
+
+init protocol Dn->B1 (drone and primary physical beacon)
+- Dn->B1 init msg
+- B1->Dn ack msg
+- B1 >>dist-calc
+
+dist-calc protocol B1->B2 (two physical beacons, B2 may stand for Dn)
+- B1->B2 distance request: W := 'sent' timestamp (using B1 clk)
+- B2->B1 distance response: W, X := 'recv' timestamp (B2 clk), Y := new 'sent' timestamp (B2 clk)
+- B1: Z := new 'recv' timestamp (B1 clk), RTT = Z - W - (Y - X), dist-array.dist12 = 0.5 * RTT [ns]
+
+dist-calc-response protocol B2->B1 (two physical beacons, B1 may stand for Dn)
+- B2->B1 size 10 dist-array (12, 13, 14, 1D, 23, 24, 2D, 34, 3D, 4D, dist stored in ns)
+- B1->B2 ack msg
+
+clk-sync-init protocol Dn->B1
+- Dn->B1 clk-sync-init msg
+- B1->B2,3,4,Dn >>clk-sync
+  - B1->Dn clk-sync-success / clk-sync-fail msg.
+
+clk-sync protocol B1->B2 (two physical beacons, B2 may stand for Dn)
+- B1->B2 clock-sync request: 'sent' timestamp (using B1 clk), distance value (in ns)
+- B2: clk' = clk - (recv(B2) - sent(B1) - dist)
+- B2->B1 clock-sync confirm: 'sent' timestamp (using B2 clk)
+- B1: if recv(B1)-sent(B2)-dist < epsilon,
+        B1->Dn: clk-sync-success msg.
+      else retry >>clk-sync 
+      after 3 unsuccessful tries:
+      	B1->Dn clk-sync-fail msg
+	Dn->B1 >>init
+
+send-map protocol B1->B2 (two physical beacons, B1 may stand for Dn)
+- if sender is Dn: create 3d map of beacons and dn based on dist-array.
+  - 3d map: mtx 5x3, dist. in ns
+  - B1 coord: 0.0 0.0 0.0
+  - B2 coord: 0.0 y z
+- B1->B2 map msg: mtx 5x3
+- B2->B1 ack msg
+
+init-complete protocol Dn->DCS
+- Dn->DCS init-complete msg
+- DCS->Dn ack msg
+- Dn >>flight-regular
+
+flight-regular protocol
+- Dn->B1 flight-regular msg:
+  - var time-to-init: timestamp to begin triangulation
+  - var triang-interval: triangulation intervals
+- B1->B2,B3,B4 flight-regular msg
+- B2,B3,B4->B1 ack msg
+- B1->Dn ack msg
+- Dn->DCS flight-regular msg
+- DCS->Dn ack msg
+- Dn waiting for >>flight-manual-steer, >>flight-zero-init or >>flight-auto-init from DCS
+- Dn waiting for >>triang from B1, B2, B3, B4
+  - On >>triang, Dn >>map-recalc
+  - If map-irreg-minor
+    - Dn->B1 >>map-irreg-minor
+  - Else if map-irreg-major, Dn->B1 >>map-major-irreg
+  
+triang protocol B1,B2,B3,B4->Dn (all physical beacons and drone)
+B1,B2,B3,B4->Dn triang msg: timestamp
+Dn: >>map-recalc
+
+map-recalc protocol Dn - unfinished
+
+map-irreg-minor Dn->B1
+if Dn
+  - log map-irreg-minor vars (dist vector4) from 3 different positions
+  - >>map-irreg-minor-recalc, save new map(5x3)
+    - if fail: Dn->B1 >>map-irreg-major
+Dn->B1 map-irreg-minor msg: map(5x3)
+B1->B2,B3,B4 map-irreg-minor msg: map(5x3)
+B2,B3,B4->B1 ack msg
+B1->Dn ack msg
+
+map-irreg-minor-recalc Dn - unfinished
+
+map-irreg-major Dn->B1 (if more than 1 beacon moved, or moved in 4th dimension)
+- Dn->DCS map-irreg-major msg: "beacon map irreg, recalculation underway"
+- Dn:
+  - stops mid-air
+  - >>save-flight-status
+  - logs non-irregular beacon & Dn positions in map-irreg-major mtx(5x3)
+  - begins init position sequence
+    - Alterations:
+    - >>send-map: retaining stable positions from map-irreg-major mtx
+    - >>init-complete: >>map-irreg-major-complete instead
+
+map-irreg-major-complete protocol Dn->DCS
+- Dn->DCS map-irreg-major-complete msg
+- DCS->Dn ack msg
+- Dn >>load-flight-status
+
+save-flight-status protocol Dn - unfinished
+load-flight-status protocol Dn - unfinished
+flight-manual-steer protocol DCS->Dn - unfinished
+flight-zero-init protocol DCS->Dn - unfinished
+flight-auto-init protocol DCS->Dn - unfinished
