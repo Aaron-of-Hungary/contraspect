@@ -3,10 +3,7 @@
 ROS B1.cpp - ~/catkin_ws/src/contraspect/src/B1.cpp
 
 Author: 
- Hajdu-Moharos Áron
-Project: 
- Önálló Laboratórium 2022/23/2
- ContraSpect Drón-lokációs- és -navigációs rendszer
+ Anis Koubaa, Gaitech EDU
 
 */
 
