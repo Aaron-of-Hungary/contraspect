@@ -205,9 +205,9 @@ include_directories(
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
 
-#B1
-add_executable(B1_node src/B1.cpp)
-target_link_libraries (B1_node ${catkin_LIBRARIES})
+#beacon_node
+add_executable(beacon_node src/beacon_node.cpp)
+target_link_libraries (beacon_node ${catkin_LIBRARIES})
 #B2
 add_executable(B2_node src/B2.cpp)
 target_link_libraries (B2_node ${catkin_LIBRARIES})

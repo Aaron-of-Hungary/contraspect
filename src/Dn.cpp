@@ -3,10 +3,8 @@
 ROS Dn.cpp - ~/catkin_ws/src/contraspect/src/Dn.cpp
 
 Author: 
- Hajdu-Moharos Áron
+ Anis Koubaa, Gaitech EDU
 Project: 
- Önálló Laboratórium 2022/23/2
- ContraSpect Drón-lokációs- és -navigációs rendszer
 
  */
 
