@@ -16,6 +16,13 @@ double pos[3] = {0.0, 0.0, 0.0};
 double beacon_dist[4] = {0.0, 0.0, 0.0, 0.0};
 bool init = false;
 
+
+ros::Publisher pub_DCS_recv_data,
+  pub_loc_track_data,
+  pub_triang_calc_result,
+  pub_triang_recv_data,
+  pub_Dn_cmd;
+
 // function to check whether str has format "12.345" or "67,890" or neither. Auxiliary of coordParse()
 bool floatFormat(const char* str);
 // function to parse coordinates from argv
@@ -28,6 +35,26 @@ void callback_triang_delay_info(const std_msgs::String::ConstPtr& msg);
 void callback_DCS_cmd(const std_msgs::String::ConstPtr& msg);
 
 int main(int argc, char **argv){
+  std::string tmpstring;
+  	// initializing coordinates - ADD option for minus sign!
+	for(size_t ii(1); ii!=4; ii++){
+       	  tmpstring.clear();
+	  tmpstring += argv[ii];
+	  if(!floatFormat(tmpstring.c_str())){ // checking if correct coordinate format
+	    ROS_ERROR("Wrong coordinate format: %s \n Correct format: 12.345 or 678,90", tmpstring.c_str());
+	    return 1;  
+	  }
+	  coordParse(pos, tmpstring, ii-1); // set initial position
+	}
+	// initializing Dn_node 
+	ROS_INFO("Initializing Dn_node.\t X-coord: \t %f \n\t\t\t\t\t\t\t\t Y-coord: \t %f \n\t\t\t\t\t\t\t\t Z-coord: \t %f",
+		 pos[0], pos[1], pos[2]);
+	ros::init(argc, argv, "Dn_node");
+	if (!ros::master::check()) {
+	  ROS_ERROR("Failed to initialize ROS.");
+	  return 1;
+	}
+	
     ros::init(argc, argv, "Dn_node");
     ros::NodeHandle node;
     ros::Subscriber sub_triang = node.subscribe("triang", 1000, callback_triang);
@@ -35,16 +62,23 @@ int main(int argc, char **argv){
     ros::Subscriber sub_triang_delay_info
       = node.subscribe("triang_delay_info", 1000, callback_triang_delay_info);
 
-    ros::Publisher pub_DCS_recv_data = n.advertise<std_msgs::String>("DCS_recv_data", 1000);
-    ros::Publisher pub_loc_track_data = n.advertise<std_msgs::String>("loc_track_data", 1000);
-    ros::Publisher pub_triang_calc_result
-      = n.advertise<std_msgs::String>("triang_calc_result", 1000);
-    ros::Publisher pub_triang_recv_data
-      = n.advertise<std_msgs::String>("triang_recv_data", 1000);
-    ros::Publisher pub_Dn_cmd = n.advertise<std_msgs::String>("Dn_cmd", 1000);
+    pub_DCS_recv_data = node.advertise<std_msgs::String>("DCS_recv_data", 1000);
+    pub_loc_track_data = node.advertise<geometry_msgs::Point>("loc_track_data", 1000);
+    pub_triang_calc_result = node.advertise<std_msgs::String>("triang_calc_result", 1000);
+    pub_triang_recv_data = node.advertise<std_msgs::String>("triang_recv_data", 1000);
+    pub_Dn_cmd = node.advertise<std_msgs::String>("Dn_cmd", 1000);
 
-    
-    ros::spin();
+    // Publish location to loc_track_data topic
+    ros::Rate rate(1); // publish at 1 Hz
+    while(ros::ok())  {
+    geometry_msgs::Point point;
+    point.x = pos[0];  // X-coordinate
+    point.y = pos[1];  // Y-coordinate
+    point.z = pos[2];  // Z-coordinate
+    pub.publish(point);
+    ros::spinOnce();
+    rate.sleep();
+  }
     return 0;
 }
 
@@ -108,14 +142,15 @@ void callback_triang_delay_info(const std_msgs::String::ConstPtr& msg){
 }
 // Callback function upon receiving DCS_cmd message - forward to Dn_cmd
 void callback_DCS_cmd(const std_msgs::String::ConstPtr& msg){
+  ros::NodeHandle n;
+  std_msgs::String msg_out;
+  std::stringstream ss;
+  // check received cmd msg from DCS
   // case init-trigger protocol
   if(!strcmp(msg.data.c_str(), "init_trigger")){
     // fly up
     pos[2] = pos[2] + 1.5;
     // notify DCS
-    ros::Publisher pub_DCS_recv_data = n.advertise<std_msgs::String>("DCS_recv_data", 1000);
-    std_msgs::String msg_out;
-    std::stringstream ss;
     ss << "[Dn_node] init_trigger protocol executed, ready for init protocol.";
     msg_out.data = ss.str();
     pub_DCS_recv_data.publish(msg_out);
@@ -124,10 +159,6 @@ void callback_DCS_cmd(const std_msgs::String::ConstPtr& msg){
   else if(!strcmp(msg.data.c_str(), "init")){
     init = true;
     // notify DCS
-    ros::Publisher pub_DCS_recv_data = n.advertise<std_msgs::String>("DCS_recv_data", 1000);
-    ros::Publisher pub_Dn_cmd = n.advertise<std_msgs::String>("Dn_cmd", 1000);
-    std_msgs::String msg_out;
-    std::stringstream ss;
     ss << "[Dn_node] init protocol executed, ready for move protocol.";
     msg_out.data = ss.str();
     pub_DCS_recv_data.publish(msg_out);
@@ -137,9 +168,6 @@ void callback_DCS_cmd(const std_msgs::String::ConstPtr& msg){
   // case move protocol
   else{
     size_t ii = 0;
-    ros::Publisher pub_DCS_recv_data = n.advertise<std_msgs::String>("DCS_recv_data", 1000);
-    std_msgs::String msg_out;
-    std::stringstream ss;
     for(; ii< msg.data.length() && msg.data[ii] != ' '; ii++)
       ss << msg.data[ii];
     if(!strcmp(ss.str().c_str(), "move")){
@@ -153,6 +181,7 @@ void callback_DCS_cmd(const std_msgs::String::ConstPtr& msg){
 		    ss.str().c_str());
 	    return 1;  
 	  }
+	// set position based on instruction from DCS
 	coordParse(pos, ss.str().c_str(), jj);	  
       }
     } else {
