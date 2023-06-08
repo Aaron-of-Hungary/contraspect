@@ -5,23 +5,23 @@ PRE INIT POSITION
 
 INIT POSITION		         Post-init Timeslot
 - Dn->B1: >>init
-- B1->B2: >>dist-calc		 I
-  - B2->B4: >>dist-calc		 II
-  - B2->B3: >>dist-calc		 III
-  - B2->Dn: >>dist-calc		 IV
-  - B2->B1: >>dist-calc-response IV
-- B1->B3: >>dist-calc		 II
-  - B3->Dn: >>dist-calc		 III
-  - B3->B4: >>dist-calc		 IV
-  - B3->B1: >>dist-calc-response IV	
-- B1->B4: >>dist-calc		 III
-  - B4->Dn: >>wait >>dist-calc	 V
-  - B4->B1: >>dist-calc-response V
-- B1->Dn: >>dist-calc		 IV
-  - B1->B2: >>dist-calc-response V
-  - B1->B3: >>dist-calc-response V
-  - B1->B4: >>dist-calc-response V
-- B1->Dn: >>dist-calc-response	 V
+- B1->B2: >>dist-calib		 I
+  - B2->B4: >>dist-calib		 II
+  - B2->B3: >>dist-calib		 III
+  - B2->Dn: >>dist-calib		 IV
+  - B2->B1: >>dist-calib-response IV
+- B1->B3: >>dist-calib		 II
+  - B3->Dn: >>dist-calib		 III
+  - B3->B4: >>dist-calib		 IV
+  - B3->B1: >>dist-calib-response IV	
+- B1->B4: >>dist-calib		 III
+  - B4->Dn: >>wait >>dist-calib	 V
+  - B4->B1: >>dist-calib-response V
+- B1->Dn: >>dist-calib		 IV
+  - B1->B2: >>dist-calib-response V
+  - B1->B3: >>dist-calib-response V
+  - B1->B4: >>dist-calib-response V
+- B1->Dn: >>dist-calib-response	 V
 - Dn->B1: >>clk-sync-init	 V	(in order that Dn wait for B1 response to move on)
   - B1->B2,B3,B4,Dn: >>clk-sync	 V
 - Dn->B1: >>send-map		 VI*	( *: may be later depending on success of clk-sync alg)
@@ -42,14 +42,14 @@ init-trigger protocol DCS->Dn (digital control station and drone)
 init protocol Dn->B1 (drone and primary physical beacon)
 - Dn->B1 init msg
 - B1->Dn ack msg
-- B1 >>dist-calc
+- B1 >>dist-calib
 
-dist-calc protocol B1->B2 (two physical beacons, B2 may stand for Dn)
+dist-calib protocol B1->B2 (two physical beacons, B2 may stand for Dn)
 - B1->B2 distance request: W := 'sent' timestamp (using B1 clk)
 - B2->B1 distance response: W, X := 'recv' timestamp (B2 clk), Y := new 'sent' timestamp (B2 clk)
 - B1: Z := new 'recv' timestamp (B1 clk), RTT = Z - W - (Y - X), dist-array.dist12 = 0.5 * RTT [ns]
 
-dist-calc-response protocol B2->B1 (two physical beacons, B1 may stand for Dn)
+dist-calib-response protocol B2->B1 (two physical beacons, B1 may stand for Dn)
 - B2->B1 size 10 dist-array (12, 13, 14, 1D, 23, 24, 2D, 34, 3D, 4D, dist stored in ns)
 - B1->B2 ack msg
 
@@ -137,3 +137,6 @@ load-flight-status protocol Dn - unfinished
 flight-manual-steer protocol DCS->Dn - unfinished
 flight-zero-init protocol DCS->Dn - unfinished
 flight-auto-init protocol DCS->Dn - unfinished
+
+Exit
+/media/george/3218A8F718A8BAED/Users/hajdu/BME/ONL/ROS-projects

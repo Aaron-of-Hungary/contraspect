@@ -15,10 +15,15 @@ Project title:
 #include <cstring>
 #include <cmath>
 
+double pos[3] = {0.0, 0.0, 0.0};
+bool init = false;
+
 // function to ask ros master if a node called node_name is running. ros::master::getNodes() not working - FIX!
 bool isNodeRunning(const std::string& node_name);
-// function to check whether str has format "12.345" or "67,890" or neither
+// function to check whether str has format "12.345" or "67,890" or neither. Auxiliary of coordParse()
 bool floatFormat(const char* str);
+// function to parse coordinates from argv
+void coordParse(double (&coord_array)[3], std::string& tmpstring, size_t& ii);
 
 // argv: unique_nodename xcoord ycoord zcoord
 int main(int argc, char **argv)
@@ -26,9 +31,9 @@ int main(int argc, char **argv)
   /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*\
    || Initializing a beacon_node, setting 3D location-coordinates ||
   \*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+  //ROS_INFO("program begin");
   std::string tmpstring;
-  std::string nodename = argv[1];      
-  double coord_array[3] = {0.0, 0.0, 0.0}; // x, y and z
+  std::string nodename = argv[1];
 	// checking if there exists a node running called nodename	
 	if (0 /*isNodeRunning(nodename)*/) {
 	  ROS_ERROR("Node with name '%s' is already running. Try a different unique nodename.", nodename.c_str());
@@ -36,40 +41,17 @@ int main(int argc, char **argv)
 	} 
 	// initializing coordinates - ADD option for minus sign!
 	for(size_t ii(2); ii!=5; ii++){
-	  tmpstring.clear();
-	  tmpstring += argv[ii];	
+       	  tmpstring.clear();
+	  tmpstring += argv[ii];
 	  if(!floatFormat(tmpstring.c_str())){ // checking if correct coordinate format
 	    ROS_ERROR("Wrong coordinate format: %s \n Correct format: 12.345 or 678,90", tmpstring.c_str());
 	    return 1;  
 	  }
-	  size_t jj(0), kk(0);
-	  for(; tmpstring[jj]!='.' && tmpstring[jj]!=','; jj++); // finding decimal point index
-	  // string to double conversion:
-	  for(; kk!=jj; kk++){
-	    int xx(0), yy(0), zz(0);
-	    double ww(0.0);
-	    xx = pow(10, kk);
-	    yy = (int)( tmpstring[jj-1-kk] - ('0'-'\0') );
-	    zz = xx * yy;
-	    ww = coord_array[ii-2];
-	    coord_array[ii-2] = ww + (double)zz;
-	    //ROS_INFO("ii = %ld || kk = %ld || %f + %f = %f", ii, kk, ww, (double)zz, coord_array[ii-2]); // <- for debugging string to double conversion
-	  }
-	  kk++; // skip decimal point
-	  for(; kk!=tmpstring.length(); kk++){
-	    double xx(0.0), zz(0.0), ww(0.0);
-	    int yy(0);
-	    xx = pow( 10.0, ((double)jj-(double)kk) );
-	    yy = (int)( tmpstring[kk] - ('0'-'\0') );
-	    zz = xx * (double)yy;
-	    ww = coord_array[ii-2];
-	    coord_array[ii-2] = ww + zz;
-	    //ROS_INFO("ii = %ld || kk = %ld || %f + %f = %f", ii, kk, ww, zz, coord_array[ii-2]); // <- for debugging string to double conversion
-	  }
+	  coordParse(pos, tmpstring, ii-2);	  
 	}
 	// initializing node with unique nodename
 	ROS_INFO("Initializing beacon_node.\t Unique-name: \t %s \n\t\t\t\t\t\t\t\t X-coord: \t %f \n\t\t\t\t\t\t\t\t Y-coord: \t %f \n\t\t\t\t\t\t\t\t Z-coord: \t %f"
-		 , nodename.c_str(), coord_array[0], coord_array[1], coord_array[2]);
+		 , nodename.c_str(), pos[0], pos[1], pos[2]);
 	ros::init(argc, argv, nodename.c_str());
 	if (!ros::master::check()) {
 	  ROS_ERROR("Failed to initialize ROS.");
@@ -128,6 +110,35 @@ bool floatFormat(const char* str) {
       }
     }
     return true;
+}
+
+// function to parse coordinates from argv input string
+void coordParse(double (&coord_array)[3], std::string& tmpstring, size_t& ii){
+  //ROS_INFO("parse begin");
+  size_t jj(0), kk(0);
+  for(; tmpstring[jj]!='.' && tmpstring[jj]!=','; jj++); // finding decimal point index
+  // string to double conversion:
+  for(; kk!=jj; kk++){
+    int xx(0), yy(0), zz(0);
+    double ww(0.0);
+    xx = pow(10, kk);
+    yy = (int)( tmpstring[jj-1-kk] - ('0'-'\0') );
+    zz = xx * yy;
+    ww = coord_array[ii];
+    coord_array[ii] = ww + (double)zz;
+    //ROS_INFO("ii = %ld || kk = %ld || %f + %f = %f", ii, kk, ww, (double)zz, coord_array[ii]); // <- for debugging string to double conversion
+  }
+  kk++; // skip decimal point
+  for(; kk!=tmpstring.length(); kk++){
+    double xx(0.0), zz(0.0), ww(0.0);
+    int yy(0);
+    xx = pow( 10.0, ((double)jj-(double)kk) );
+    yy = (int)( tmpstring[kk] - ('0'-'\0') );
+    zz = xx * (double)yy;
+    ww = coord_array[ii];
+    coord_array[ii] = ww + zz;
+    //ROS_INFO("ii = %ld || kk = %ld || %f + %f = %f", ii, kk, ww, zz, coord_array[ii]); // <- for debugging string to double conversion
+  }
 }
 
 /* 

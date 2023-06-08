@@ -208,15 +208,15 @@ include_directories(
 #beacon_node
 add_executable(beacon_node src/beacon_node.cpp)
 target_link_libraries (beacon_node ${catkin_LIBRARIES})
-#B2
-add_executable(B2_node src/B2.cpp)
-target_link_libraries (B2_node ${catkin_LIBRARIES})
-#B3
-add_executable(B3_node src/B3.cpp)
-target_link_libraries (B3_node ${catkin_LIBRARIES})
-#B4
-add_executable(B4_node src/B4.cpp)
-target_link_libraries (B4_node ${catkin_LIBRARIES})
-#Dn
-add_executable(Dn_node src/Dn.cpp)
+#Dn_node
+add_executable(Dn_node src/Dn_node.cpp)
 target_link_libraries (Dn_node ${catkin_LIBRARIES})
+#DCS_node
+add_executable(DCS_node src/DCS_node.cpp)
+target_link_libraries (DCS_node ${catkin_LIBRARIES})
+#contraspect_info
+add_executable(contraspect_info src/contraspect_info.cpp)
+target_link_libraries (contraspect_info ${catkin_LIBRARIES})
+
+# Exit
+# /media/george/3218A8F718A8BAED/Users/hajdu/BME/ONL/ROS-projects
