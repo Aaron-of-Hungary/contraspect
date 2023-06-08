@@ -7,17 +7,21 @@ Project:
 
 #include "ros/ros.h"
 #include "std_msgs/String.h"
+#include <sstream>
 
-void triangCallback(const std_msgs::String::ConstPtr& topic_msg){
-    ROS_INFO("[DCS_node] Heard from 'DCS-Stream': \"%s\"", topic_msg->data.c_str());
-}
-
-int main(int argc, char **argv){
-    ros::init(argc, argv, "DCS_node");
-    ros::NodeHandle node;
-    ros::Subscriber sub = node.subscribe("DCS-Stream", 1000, triangCallback);
-    ros::spin(); // does it spin ad infinitem? If yes, good. It is to be turned off manually
-    return 0;
+int main(int argc, char **argv)
+{
+	ros::init(argc, argv, "DCS_node");
+	ros::NodeHandle n;
+	ros::Publisher pub_DCS_cmd = n.advertise<std_msgs::String>("DCS_cmd", 1000);
+	std_msgs::String msg;
+	std::stringstream ss;
+	ss << argv[1];
+	msg.data = ss.str();
+	ROS_INFO("[DCS_node] Published to DCS_cmd: \"%s\"", msg.data.c_str());
+	pub_DCS_cmd.publish(msg);
+	
+   return 0;
 }
 
 /* 

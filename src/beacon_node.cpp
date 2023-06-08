@@ -34,6 +34,8 @@ int main(int argc, char **argv)
   //ROS_INFO("program begin");
   std::string tmpstring;
   std::string nodename = argv[1];
+  ros::Publisher triang_publisher = n.advertise<std_msgs::String>("triang", 1000);
+  ros::Publisher pub_loc_track_data = node.advertise<geometry_msgs::Point>("loc_track_data", 1000);
 	// checking if there exists a node running called nodename	
 	if (0 /*isNodeRunning(nodename)*/) {
 	  ROS_ERROR("Node with name '%s' is already running. Try a different unique nodename.", nodename.c_str());
@@ -58,9 +60,9 @@ int main(int argc, char **argv)
 	  return 1;
 	}
 	ros::NodeHandle n;
-	ros::Publisher triang_publisher = n.advertise<std_msgs::String>("triang", 1000);
 	ros::Rate loop_rate(0.5); // spin once per second
    int count = 0;
+   // LOOP
    while (ros::ok()) 
    {
        std_msgs::String msg;
