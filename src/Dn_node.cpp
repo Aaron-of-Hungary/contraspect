@@ -71,14 +71,14 @@ int main(int argc, char **argv){
     // Publish location to loc_track_data topic
     ros::Rate rate(1); // publish at 1 Hz
     while(ros::ok())  {
-    geometry_msgs::Point point;
-    point.x = pos[0];  // X-coordinate
-    point.y = pos[1];  // Y-coordinate
-    point.z = pos[2];  // Z-coordinate
-    pub.publish(point);
-    ros::spinOnce();
-    rate.sleep();
-  }
+      geometry_msgs::Point point;
+      point.x = pos[0];  // X-coordinate
+      point.y = pos[1];  // Y-coordinate
+      point.z = pos[2];  // Z-coordinate
+      pub.publish(point);
+      ros::spinOnce();
+      rate.sleep();
+    }
     return 0;
 }
 
@@ -130,10 +130,10 @@ void coordParse(double (&coord_array)[3], std::string& tmpstring, size_t& ii){
   }
 }
 
-// Callback function upon receiving triang message - Do nothing
+// Callback function upon receiving triang message
 void callback_triang(const std_msgs::String::ConstPtr& msg){
   // ROS_INFO("[Dn_node] Triang-msg received: \"%s\"", msg->data.c_str());
-  ;
+  calculateDistance(msg);
 }
 
 // Callback function upon receiving triang_delay_info message - calculate beacon distances

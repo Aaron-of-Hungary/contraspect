@@ -34,7 +34,7 @@ int main(int argc, char **argv)
   //ROS_INFO("program begin");
   std::string tmpstring;
   std::string nodename = argv[1];
-  ros::Publisher triang_publisher = n.advertise<std_msgs::String>("triang", 1000);
+  ros::Publisher pub_triang = n.advertise<std_msgs::String>("triang", 1000);
   ros::Publisher pub_loc_track_data = node.advertise<geometry_msgs::Point>("loc_track_data", 1000);
 	// checking if there exists a node running called nodename	
 	if (0 /*isNodeRunning(nodename)*/) {
@@ -60,23 +60,24 @@ int main(int argc, char **argv)
 	  return 1;
 	}
 	ros::NodeHandle n;
-	ros::Rate loop_rate(0.5); // spin once per second
-   int count = 0;
+	ros::Rate loop_rate(0.5); // spin once per second         
    // LOOP
    while (ros::ok()) 
    {
-       std_msgs::String msg;
-       std::stringstream ss;
-       ss << "beacon_node \"" << nodename << "\" Triang Msg " << count/10;
-       msg.data = ss.str();
-       if(!(count%10)){ // publish once every 10 spins
-	 ROS_INFO("[%s] msg published to topic \"triang\": %s\n", nodename.c_str(), msg.data.c_str());
-	 triang_publisher.publish(msg);
-       }
-       // ROS_INFO("Spin once");
-       ros::spinOnce(); 
-       loop_rate.sleep();
-       count++;
+     // Publish triang msg
+     std_msgs::String msg;
+     std::stringstream ss;
+     ss << nodename;
+     msg.data = ss.str();
+     pub_triang.publish(msg);
+     // Publish loc_track_data msg    
+     geometry_msgs::Point point;
+     point.x = pos[0];  // X-coordinate
+     point.y = pos[1];  // Y-coordinate
+     point.z = pos[2];  // Z-coordinate
+     pub.publish(point);
+     ros::spinOnce(); 
+     loop_rate.sleep();
    }
    return 0;
 }
