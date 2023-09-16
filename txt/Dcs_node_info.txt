@@ -1,0 +1,10 @@
+- DCS NODE -
+Simulation node of the Digital Control Station (DCS)
+Mode A: Show position of Drone (Dn) and Beacons (Bcns)
+Mode B: Synchronize Dn and Bcn internal clk
+Mode C: Send movement cntrl messages to Dn
+SUBSCRIBE TO:	Dn_status_map
+PUBLISH TO:	Clk_sync, Dn_ctrl, object_markers
+MORE INFO:	$ rosrun contraspect Contraspect_info Dn_node
+Contraspect Drone Location and Navigation System
+August 2023 AD

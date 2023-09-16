@@ -1,0 +1,44 @@
+$ rosrun contraspect Dn_node X Y Z DEMO_OPTIONAL
+
+Simulation node of the Drone (Dn)
+Initialize BEFORE Beacons (Bcns)
+
+INTERNAL VARS
+double** map:		Map containing position coords of Dn and Bcns
+double* status:		Current direction and magnitude of Dn movement
+double clk:		Internal clock
+double* beacons_delay:	Delay in s of triang signal to arrive from Bcns
+double* beacons_dist:	Distance in m of Bcns from Dn. Calc from delay
+bool* triang_recvd:	Received triang msg from Bcns
+bool* triang_irreg:	Recvd triang msg irregular compared to previous
+bool* init_pos_irreg:   Recvd bcn_init_pos msg irregular
+bool demo:		Dn_node is running in demo mode
+
+SUBSCRIBE TO
+Triang:		Receives message from Bcns to calculate own position
+Triang_demo:	Used instead of Triang topic in demo mode
+Bcn_init_pos:	Receives pos coords from Bcn at init to store in map
+Dn_ctrl:	Receives mvmt instructions from Dcs_node
+Clk_sync:	Receives command to reset internal clock from DCS_node
+
+PUBLISH TO
+Dn_status_map:	Publishes Dn and Bcns coordinates to DCS
+CLK:		Publishes internal clock
+Dn_calc:	Publishes position from triang msgs calculation method
+
+INIT VARS
+X    		X init coord		format: 1.0
+Y Z 		Like X
+DEMO_OPTIONAL	Run in demo mode	format: demo
+
+DEMO MODE
+Instead of going directly to Dn_node from Beacon_node,
+TRIANG msg sent via Loc_sim with added delay.
+This simulates sound travel duration through space.
+
+Contraspect Drone Location and Navigation System
+Budapest University of Technology and Economics
+Department of Telecommunications and Media Informatics
+Author: Áron Hajdu-Moharos
+Consultant: Dr. Gábor Fehér
+August 2023 AD

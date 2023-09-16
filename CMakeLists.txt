@@ -11,7 +11,13 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
-)
+  geometry_msgs
+  visualization_msgs
+  contraspect_msgs
+  )
+
+find_package(Eigen3 REQUIRED)
+find_package(Curses REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -71,6 +77,8 @@ find_package(catkin REQUIRED COMPONENTS
 # generate_messages(
 #   DEPENDENCIES
 #   std_msgs
+#   geometry_msgs
+#   contraspect_msgs
 # )
 
 ################################################
@@ -103,9 +111,9 @@ find_package(catkin REQUIRED COMPONENTS
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES contraspect
-#  CATKIN_DEPENDS roscpp rospy std_msgs
+  INCLUDE_DIRS include
+  LIBRARIES contraspect_lib
+  CATKIN_DEPENDS roscpp rospy std_msgs contraspect_msgs
 #  DEPENDS system_lib
 )
 
@@ -116,8 +124,10 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-# include
-  ${catkin_INCLUDE_DIRS}
+include
+${catkin_INCLUDE_DIRS}
+${EIGEN3_INCLUDE_DIRS}
+${CURSES_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -205,18 +215,53 @@ include_directories(
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
 
-#beacon_node
-add_executable(beacon_node src/beacon_node.cpp)
-target_link_libraries (beacon_node ${catkin_LIBRARIES})
+#                 # # #                 #
+# Source code for the contraspect nodes #
+#                 # # #                 #
+#Beacon_node
+add_executable(Beacon_node src/Beacon_node.cpp)
+target_link_libraries (Beacon_node ${catkin_LIBRARIES} contraspect_lib ${CURSES_LIBRARIES})
+target_include_directories(Beacon_node PRIVATE ${catkin_INCLUDE_DIRS} include)
 #Dn_node
 add_executable(Dn_node src/Dn_node.cpp)
-target_link_libraries (Dn_node ${catkin_LIBRARIES})
-#DCS_node
-add_executable(DCS_node src/DCS_node.cpp)
-target_link_libraries (DCS_node ${catkin_LIBRARIES})
-#contraspect_info
-add_executable(contraspect_info src/contraspect_info.cpp)
-target_link_libraries (contraspect_info ${catkin_LIBRARIES})
+target_link_libraries (Dn_node ${catkin_LIBRARIES} ${EIGEN3_LIBRARIES} contraspect_lib ${CURSES_LIBRARIES})
+target_include_directories(Dn_node PRIVATE ${catkin_INCLUDE_DIRS} include)
+#Dcs_node
+add_executable(Dcs_node src/Dcs_node.cpp)
+target_link_libraries (Dcs_node ${catkin_LIBRARIES} ${CURSES_LIBRARIES} contraspect_lib ${CURSES_LIBRARIES})
+target_include_directories(Dcs_node PRIVATE ${catkin_INCLUDE_DIRS} include)
+#Contraspect_info
+add_executable(Contraspect_info src/Contraspect_info.cpp)
+target_link_libraries (Contraspect_info ${catkin_LIBRARIES} contraspect_lib ${CURSES_LIBRARIES})
+target_include_directories(Contraspect_info PRIVATE ${catkin_INCLUDE_DIRS} include)
+#quicktest
+add_executable(quicktest src/quicktest.cpp)
+target_link_libraries (quicktest ${catkin_LIBRARIES} contraspect_lib ${CURSES_LIBRARIES})
+target_include_directories(quicktest PRIVATE ${catkin_INCLUDE_DIRS} include)
 
-# Exit
-# /media/george/3218A8F718A8BAED/Users/hajdu/BME/ONL/ROS-projects
+#         # # #         #
+# Contraspect.h library #
+#         # # #         #
+add_library(contraspect_lib
+  include/contraspect/contraspect.h
+  src/contraspect.cpp
+  )
+target_include_directories(contraspect_lib
+  PUBLIC
+  ${catkin_INCLUDE_DIRS}
+  include
+  )
+add_dependencies(contraspect_lib ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(contraspect_lib
+  ${catkin_LIBRARIES}
+)
+install(
+  TARGETS contraspect_lib
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
+)
+install(
+  DIRECTORY include/${PROJECT_NAME}/
+  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+)

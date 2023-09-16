@@ -1,0 +1,29 @@
+$ rosrun contraspect Dcs_node MODE
+
+Simulation node of the Digital Control Station (DCS)
+
+Mode options
+A: Show position of Drone (Dn) and Beacons (Bcns)
+B: Synchronize Dn and Bcn internal clk
+C: Send movement cntrl messages to Dn
+
+INTERNAL VARS
+enum M mode:	Mode A B or C to define DCS function
+
+SUBSCRIBE TO
+Dn_status_map:	Receives map containing Dn and Bcns coordinates from Dn
+
+PUBLISH TO
+Clk_sync:	Publishes command msg to synchronise Dn and Bcns internal clk
+Dn_ctrl:	Publishes move commands to Dn
+object_markers:	Publishes visualization msgs for Ros std pkg rviz
+
+INIT VARS
+MODE:		A B or C depending on what function DCS should fulfill
+
+Contraspect Drone Location and Navigation System
+Budapest University of Technology and Economics
+Department of Telecommunications and Media Informatics
+Author: Áron Hajdu-Moharos
+Consultant: Dr. Gábor Fehér
+August 2023 AD

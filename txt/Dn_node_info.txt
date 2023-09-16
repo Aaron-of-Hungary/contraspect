@@ -1,0 +1,8 @@
+Simulation node of the Drone (Dn)
+Initialize BEFORE Beacons (Bcns)
+Optional DEMO MODE
+SUBSCRIBE TO:	Triang, Triang_demo, Bcn_init_pos, Dn_ctrl, Clk_sync
+PUBLISH TO:	Dn_status_map, CLK, Dn_calc
+MORE INFO:	$ rosrun contraspect Contraspect_info Dn_node
+Contraspect Drone Location and Navigation System
+August 2023 AD

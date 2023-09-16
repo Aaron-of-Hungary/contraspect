@@ -1,0 +1,8 @@
+- BEACON NODE -
+Simulation node of a homing beacon (bcn)
+Initialize AFTER Dn_node and Loc_sim
+SUBSCRIBE TO:	  Clk_sync
+PUBLISH TO:	  Triang, CLK, Bcn_init_pos
+MORE INFO:	  $ rosrun contraspect Contraspect_info Beacon_node
+Contraspect Drone Location and Navigation System
+August 2023 AD

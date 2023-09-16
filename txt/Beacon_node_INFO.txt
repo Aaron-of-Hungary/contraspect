@@ -1,0 +1,29 @@
+$ rosrun contraspect Beacon_node BID X Y Z
+
+Simulation node of a homing beacon (bcn)
+Initialize AFTER Dn_node and Loc_sim
+
+INTERNAL VARS
+double clk:	Internal clock
+double* pos:	Position coords
+unsigned bid:	Unique ID
+
+SUBSCRIBE TO
+Clk_sync:	Receives command to reset internal clock from DCS_node
+
+PUBLISH TO
+Triang:		Publishes messages which Drone (Dn) receives to calculate own position
+CLK:		Publishes internal clock
+Bcn_init_pos:	Publishes own location at initialization for Dn to save
+
+INIT VARS
+BID		Beacon ID	format: 1 2 3 or 4
+X    		X init coord	format: 1.0
+Y Z 		Like X
+
+Contraspect Drone Location and Navigation System
+Budapest University of Technology and Economics
+Department of Telecommunications and Media Informatics
+Author: Áron Hajdu-Moharos
+Consultant: Dr. Gábor Fehér
+August 2023 AD
