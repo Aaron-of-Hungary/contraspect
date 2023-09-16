@@ -1,0 +1,9 @@
+- TOPIC_SPY -
+Listener to any active topic of the contraspect system
+SUBSCRIBE TO: Dn_status_map, Clk_sync, Dn_ctrl, Dn_calc,
+	      Loc_sim_calc, CLK, Triang, Triang_demo,
+	      Bcn_init_pos, object_markers
+PUBLISH TO:   n/a
+MORE INFO:    $ rosrun contraspect_demo Contraspect_demo_info Topic_spy
+Contraspect Drone Location and Navigation System
+August 2023 AD

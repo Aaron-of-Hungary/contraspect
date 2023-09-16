@@ -1,0 +1,8 @@
+- LOC_SIM -
+Demo mode simulator of sound travel duration through space
+Initialize BEFORE Beacon_node and with Dn_node in DEMO mode
+SUBSCRIBE TO: Triang, Bcn_init_pos, Dn_ctrl, Dn_status_map
+PUBLISH TO:   Triang_demo, Loc_sim_calc
+MORE INFO:    $ rosrun contraspect_demo Contraspect_demo_info Loc_sim
+Contraspect Drone Location and Navigation System
+August 2023 AD

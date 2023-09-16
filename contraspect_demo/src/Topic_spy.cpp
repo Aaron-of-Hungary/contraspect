@@ -1,0 +1,304 @@
+/***
+  Title: Topic_spy
+  Author: Aron Hajdu-Moharos
+  Filename: contraspect_demo/src/Topic_spy.cpp
+  Description: Node which can listen to any topic.
+  Project: Contraspect Drone Location and Navigation System
+***/
+
+#include "ros/ros.h"
+#include "contraspect/contraspect.h"
+#include "visualization_msgs/Marker.h"
+#include "visualization_msgs/MarkerArray.h"
+#include "contraspect_msgs/Triang.h"
+#include "contraspect_msgs/Bcn_pos.h"
+#include "contraspect_msgs/Clk_sync.h"
+#include "contraspect_msgs/Status_map.h"
+#include "contraspect_msgs/CLK.h"
+#include "contraspect_msgs/Dn_ctrl.h"
+#include "std_msgs/String.h"
+#include <sstream>
+
+constexpr char FILENAME[]= "/home/george/catkin_ws/src/contraspect_demo/txt/Topic_spy_info.txt";
+
+enum tType {Naught, Dn_status_map, Clk_sync, Dn_ctrl, Dn_calc, Loc_sim_calc, CLK, Triang, Triang_demo, Bcn_init_pos, object_markers};
+
+std::string markerTypeToString(uint8_t type);
+std::string markerActionToString(uint8_t type);
+std::string printMarkerArray(	const visualization_msgs::MarkerArray::ConstPtr &MA);
+std::string printMarker(const visualization_msgs::Marker &M);
+unsigned argvParse(int &Argc, char **Argv, enum tType &ActiveTopic);
+std::string activeTopic_str(enum tType &ActiveTopic);
+ros::Subscriber activeTopic_rossub(enum tType &ActiveTopic, ros::NodeHandle &N);
+ros::ServiceServer activeTopic_rosser(enum tType &ActiveTopic, ros::NodeHandle &N);
+
+void callback_Dn_status_map(	const contraspect_msgs::Status_map::ConstPtr &msg   ); 
+void callback_Dn_calc(		const std_msgs::String::ConstPtr &msg	     	    ); 
+void callback_Loc_sim_calc(	const std_msgs::String::ConstPtr &msg		    ); 
+void callback_CLK(		const contraspect_msgs::CLK::ConstPtr &msg	    ); 
+void callback_Triang(		const contraspect_msgs::Triang::ConstPtr &msg	    ); 
+void callback_Triang_demo(	const contraspect_msgs::Triang::ConstPtr &msg	    ); 
+void callback_object_markers(	const visualization_msgs::MarkerArray::ConstPtr &msg); 
+
+bool callback_Clk_sync(	   contraspect_msgs::Clk_sync::Request  &req, 
+     			   contraspect_msgs::Clk_sync::Response &res); 
+bool callback_Bcn_init_pos(contraspect_msgs::Bcn_pos ::Request  &req,
+     			   contraspect_msgs::Bcn_pos ::Response &res);
+bool callback_Dn_ctrl(	   contraspect_msgs::Dn_ctrl ::Request  &req,
+     			   contraspect_msgs::Dn_ctrl ::Response &res); 
+
+int main(int argc, char **argv){
+
+  /* Print node info */
+  if(cspect::ROS_INFO_F(FILENAME)) ROS_WARN("Print node info failed.");
+  
+  /* Parse argv */
+  enum tType activeTopic = Naught;
+  if (argvParse(argc, argv, activeTopic)){
+    ROS_ERROR("Parse argv failed. Node shutdown.");
+    return 1;    
+  }
+
+  /* Initialize node and pub-sub variables */
+  bool msg = true;
+  if(activeTopic==Clk_sync||activeTopic==Bcn_init_pos||activeTopic==Dn_ctrl) msg = false;
+  std::stringstream ss;
+  if(activeTopic) ss.str("_");
+  cspect::ssEnd(ss);
+  ss << activeTopic_str(activeTopic);
+  cspect::ssAddFront("Topic_spy", ss);
+  std::string s = ss.str();
+  ros::init(argc, argv, s.c_str());
+  ros::NodeHandle n;
+  ros::Subscriber sub;
+  ros::ServiceServer ser;
+  if(msg) sub = activeTopic_rossub(activeTopic, n);
+  else ser = activeTopic_rosser(activeTopic, n);
+  /*ROS_INFO("Initialize node success");*/
+
+  /* End of code */
+  ros::spin();
+  return 0;  
+
+}
+
+unsigned argvParse(int &Argc, char **Argv, enum tType &ActiveTopic){
+  /* Check argc */
+  if(Argc!=2){
+    ROS_ERROR("Parse argv error. Incorrect number of args.");
+    return 1;
+  }
+  /* Parse argv */
+  std::string s = cspect::capitalize(Argv[1]); 
+  if(	  s == "DN_STATUS_MAP")  ActiveTopic = Dn_status_map;
+  else if(s == "CLK_SYNC")	 ActiveTopic = Clk_sync;
+  else if(s == "DN_CTRL") 	 ActiveTopic = Dn_ctrl;
+  else if(s == "DN_CALC") 	 ActiveTopic = Dn_calc;
+  else if(s == "LOC_SIM_CALC") 	 ActiveTopic = Loc_sim_calc;
+  else if(s == "CLK") 		 ActiveTopic = CLK;
+  else if(s == "TRIANG") 	 ActiveTopic = Triang;
+  else if(s == "TRIANG_DEMO") 	 ActiveTopic = Triang_demo;
+  else if(s == "BCN_INIT_POS") 	 ActiveTopic = Bcn_init_pos;
+  else if(s == "OBJECT_MARKERS") ActiveTopic = object_markers;
+  else{
+    ROS_ERROR("Parse argv error. Incorrect format.\nTry: Dn_status_map, Clk_sync, Dn_ctrl, Dn_calc, Loc_sim_calc, CLK, Triang, Triang_demo, Bcn_init_pos, object_markers");
+    return 1;
+  }
+  return 0;
+}
+
+std::string activeTopic_str(enum tType &ActiveTopic) {
+  switch (ActiveTopic) {
+    case Naught:          return "";
+    case Dn_status_map: return "Dn_status_map";
+    case Clk_sync:      return "Clk_sync";
+    case Dn_ctrl:       return "Dn_ctrl";
+    case Dn_calc:       return "Dn_calc";
+    case Loc_sim_calc:  return "Loc_sim_calc";
+    case CLK:           return "CLK";
+    case Triang:        return "Triang";
+    case Triang_demo:   return "Triang_demo";
+    case Bcn_init_pos:  return "Bcn_init_pos";
+    case object_markers: return "object_markers";
+    default:
+      return "";
+  }
+}
+
+ros::Subscriber activeTopic_rossub(enum tType &ActiveTopic, ros::NodeHandle &N){
+  switch (ActiveTopic){
+  case Dn_status_map: return N.subscribe("Dn_status_map",cspect::SUBRATE,callback_Dn_status_map);
+  case Loc_sim_calc:  return N.subscribe("Loc_sim_calc" ,cspect::SUBRATE,callback_Loc_sim_calc );
+  case CLK: 	      return N.subscribe("CLK"          ,cspect::SUBRATE,callback_CLK          );
+  case Triang: 	      return N.subscribe("Triang"       ,cspect::SUBRATE,callback_Triang       );
+  case Triang_demo:   return N.subscribe("Triang_demo"  ,cspect::SUBRATE,callback_Triang_demo  );
+  case object_markers:return N.subscribe("object_markers",cspect::SUBRATE,callback_object_markers);
+  default: ROS_ERROR                    ("Error in activeTopic_rossub function"                );
+  	    	      return N.subscribe(""             ,cspect::SUBRATE, callback_CLK         );
+  }
+}
+
+ros::ServiceServer activeTopic_rosser(enum tType &ActiveTopic, ros::NodeHandle &N){
+  switch(ActiveTopic){
+  case Dn_ctrl     : return N.advertiseService("Dn_ctrl"     , callback_Dn_ctrl      );
+  case Bcn_init_pos: return N.advertiseService("Bcn_init_pos", callback_Bcn_init_pos );
+  case Clk_sync    : return N.advertiseService("Clk_sync"    , callback_Clk_sync     );
+  default          : ROS_ERROR             ("Error in activeTopic_rosser function");
+                     return N.advertiseService(""            , callback_Dn_ctrl      );
+  }
+}
+
+void callback_Dn_status_map(	const contraspect_msgs::Status_map::ConstPtr &msg){
+  if(msg){
+    std::stringstream ss;
+    ss << "I heard on Dn_status_map topic:"
+       << "\nsx:  " << msg->sx  << "\tsy:  " << msg->sy  << "\tsz:  " << msg->sz
+       << "\ndx:  " << msg->dx  << "\tdy:  " << msg->dy  << "\tdz:  " << msg->dz
+       << "\nb1x: " << msg->b1x << "\tb1y: " << msg->b1y << "\tb1z: " << msg->b1z
+       << "\nb2x: " << msg->b2x << "\tb2y: " << msg->b2y << "\tb2z: " << msg->b2z
+       << "\nb3x: " << msg->b3x << "\tb3y: " << msg->b3y << "\tb3z: " << msg->b3z
+       << "\nb4x: " << msg->b4x << "\tb4y: " << msg->b4y << "\tb4z: " << msg->b4z;
+    std::string s = ss.str();
+    ROS_INFO("%s",s.c_str());
+  }
+}
+void callback_Dn_calc(		const std_msgs::String::ConstPtr &msg){
+  if(msg){
+    std::stringstream ss;
+    ss << "I heard on Dn_calc topic:\n"
+       << msg->data;
+    std::string s = ss.str();
+    ROS_INFO("%s",s.c_str());
+  }
+}
+void callback_Loc_sim_calc(	const std_msgs::String::ConstPtr &msg){
+  if(msg){
+    std::stringstream ss;
+    ss << "I heard on Loc_sim_calc topic:\n"
+       << msg->data;
+    std::string s = ss.str();
+    ROS_INFO("%s",s.c_str());
+  }
+}
+void callback_CLK(		const contraspect_msgs::CLK::ConstPtr &msg){
+  if(msg){
+    std::stringstream ss;
+    ss << "I heard on CLK topic:"
+       << "\nclk: " << msg->clk << "\tbid: " << (unsigned)msg->bid;
+    std::string s = ss.str();
+    ROS_INFO("%s",s.c_str());
+  }
+}
+void callback_Triang(		const contraspect_msgs::Triang::ConstPtr &msg){
+  if(msg){
+    std::stringstream ss;
+    ss << "I heard on Triang topic:"
+       << "\ntimestamp: " << msg->timestamp << "\tbid: " << (unsigned)msg->bid;
+    std::string s = ss.str();
+    ROS_INFO("%s",s.c_str());
+  }
+}
+void callback_Triang_demo(	const contraspect_msgs::Triang::ConstPtr &msg){
+  if(msg){
+    std::stringstream ss;
+    ss << "I heard on Triang_demo topic:"
+       << "\ntimestamp: " << msg->timestamp << "\tbid: " << (unsigned)msg->bid;
+    std::string s = ss.str();
+    ROS_INFO("%s",s.c_str());
+  }
+}
+void callback_object_markers(	const visualization_msgs::MarkerArray::ConstPtr &msg){
+  if(msg){
+    std::stringstream ss;
+    ss << "I heard on object_markers topic:" << std::endl;
+    ss << printMarkerArray(msg);
+    std::string s = ss.str();
+    ROS_INFO("%s",s.c_str());
+  }
+}
+
+bool callback_Clk_sync(contraspect_msgs::Clk_sync::Request  &req, 
+		       contraspect_msgs::Clk_sync::Response &res){
+  std::stringstream ss;
+  ss << "I apprehended Clk_sync service request:"
+     << "\nrequest.all_syncd = "
+     << req.all_syncd;
+  std::string s = ss.str();
+  ROS_INFO("%s",s.c_str());
+  return true;
+} 
+bool callback_Bcn_init_pos(contraspect_msgs::Bcn_pos ::Request  &req,
+			   contraspect_msgs::Bcn_pos ::Response &res){
+  std::stringstream ss;
+  ss << "I apprehended Bcn_init_pos service request:"
+     << "\nx: " << req.x << "\ty: " << req.y << "\tz: " << req.z
+     << "\tbid: " << (unsigned)req.bid;
+  std::string s = ss.str();
+  ROS_INFO("%s",s.c_str());
+  return true;
+}
+bool callback_Dn_ctrl(contraspect_msgs::Dn_ctrl ::Request  &req,
+		      contraspect_msgs::Dn_ctrl ::Response &res){
+  std::stringstream ss;
+  ss << "I apprehended Dn_ctrl service request:"
+     << "\nx: " << req.x << "\ty: " << req.y << "\tz: " << req.z;
+  std::string s = ss.str();
+  ROS_INFO("%s",s.c_str());
+  return true;
+}
+
+std::string markerTypeToString(uint8_t type) {
+  switch (type) {
+  case visualization_msgs::Marker::ARROW:
+    return "ARROW";
+  case visualization_msgs::Marker::CUBE:
+    return "CUBE";
+  case visualization_msgs::Marker::SPHERE:
+    return "SPHERE";
+  default:
+    return "UNKNOWN";
+  }
+}
+std::string markerActionToString(uint8_t action) { //
+  switch (action) {
+  case visualization_msgs::Marker::ADD:
+    return "ADD";
+  case visualization_msgs::Marker::DELETE:
+    return "DELETE";
+  case visualization_msgs::Marker::DELETEALL:
+    return "DELALL";
+  default:
+    return "UNKNOWN";
+  }
+}
+
+std::string printMarkerArray(	const visualization_msgs::MarkerArray::ConstPtr &MA){
+  std::stringstream ss;
+  ss << "ID" << "\t\t" << "NS"<< "\t\t" << "TYPE" << "\t\t" << "ACTION";
+  ss << '\n' << "pos_x" << "\t\t" << "pos_y" << "\t\t" << "pos_z";
+  ss << '\n' << "orie_x" << "\t\t" << "orie_y" << "\t\t" << "orie_z" << "\t\t" << "orie_w";
+  ss << '\n' << "scale_x" << "\t\t" << "scale_y" << "\t\t" << "scale_z";
+  ss << '\n' << "col_r" << "\t\t" << "col_g" << "\t\t" << "col_b" << "\t\t" << "col_a";
+  ss << '\n' << "lifetm" << "\t\t" << "fr_lckd" << "\t\t" << "txt";
+  ss << '\n' << "msh_rsc" << "\t\t" << "msh_uem";
+  for(size_t ii = 0; ii!=MA->markers.size(); ii++)
+    ss << '\n' << printMarker(MA->markers[ii]);
+  return ss.str();
+}
+
+std::string printMarker(const visualization_msgs::Marker &M) {
+  std::string mType = markerTypeToString(M.type);
+  std::string mAction = markerActionToString(M.action);
+  std::stringstream ss;
+  ss << "MARKER "<< std::to_string(M.id) << '\t' << M.ns << "\t\t" << mType << "\t\t" << mAction;
+  ss << '\n' << std::to_string(M.pose.position.x) << '\t' << std::to_string(M.pose.position.y) << '\t' << std::to_string(M.pose.position.z);
+  ss << '\n' << std::to_string(M.pose.orientation.x) << '\t' << std::to_string(M.pose.orientation.y) << '\t' << std::to_string(M.pose.orientation.z) << '\t' << std::to_string(M.pose.orientation.w);
+  ss << '\n' << std::to_string(M.scale.x) << '\t' << std::to_string(M.scale.y) << '\t' << std::to_string(M.scale.z);
+  ss << '\n' << std::to_string(M.color.r) << '\t' << std::to_string(M.color.g) << '\t' << std::to_string(M.color.b) << '\t' << std::to_string(M.color.a);
+  ss << '\n' /*<< M.lifetime << '\t'*/;
+  if(M.frame_locked) ss << 'Y'; else ss << 'N';
+  ss << '\t' << M.text;
+  ss << '\n' << M.mesh_resource << "\t\t";
+  if(M.mesh_use_embedded_materials) ss << 'Y'; else ss << 'N';  
+  return ss.str();
+}

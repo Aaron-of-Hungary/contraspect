@@ -1,0 +1,31 @@
+$ rosrun contraspect_demo Topic_spy TOPICNAME
+
+Listener to any active topic of the contraspect system
+
+INTERNAL VARS
+enum tType activeTopic:	Topic currently being listened to by node
+
+SUBSCRIBE TO
+Dn_status_map:	Topic transporting location and status info of Drone and Beacons
+Clk_sync:	Topic transporting clk-sync command from DCS to Dn and Bcns
+Dn_ctrl:	Topic transporting movement instructions from DCS to Dn
+Dn_calc:	Topic to publish position calculations by Dn
+Loc_sim_calc:	Topic to publish delay calculations by Loc_sim
+CLK:		Topic to publish internal clk by Dn and Bcns
+Triang:		Topic transporting triang msgs from Bcns to Dn or Loc_sim
+Triang_demo:	Topic transporting added delay triang msgs from Loc_sim to Dn
+Bcn_init_pos:	Topic transporting Bcn pos coords from Bcns to Dn and Loc_sim
+object_markers:	Topic transporting Dn and Bcns visualize map from DCS to rviz
+
+PUBLISH TO
+n/a
+
+INIT VARS
+TOPICNAME	Name of topic to listen to
+
+Contraspect Drone Location and Navigation System
+Budapest University of Technology and Economics
+Department of Telecommunications and Media Informatics
+Author: Áron Hajdu-Moharos
+Consultant: Dr. Gábor Fehér
+August 2023 AD

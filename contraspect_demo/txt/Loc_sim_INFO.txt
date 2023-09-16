@@ -1,0 +1,42 @@
+$ rosrun contraspect_demo Loc_sim
+
+Demo mode simulator of sound travel duration through space
+Initialize BEFORE Bcn_node and with Dn_node in DEMO mode
+
+INTERNAL VARS
+double** map:		Map containing position coords of Dn and Bcns
+double* status:		Current direction and magnitude of Dn movement
+double* beacons_dist:	Distance in m of Bcns from Dn. Use to calc delay
+double* beacons_delay:	Delay in s of triang signal to send to Dn
+double* recvd_timestamp:Timestamp to calc delay of triang send from Bcn
+double* delay_counter:	Delay timer to forward triang msg to Dn from Bcn
+bool* triang_recvd:	Received and saved triang msg from Bcns
+bool* triang_sent:	Forwarded triang msg to Dn
+bool* init_pos_irreg:   Recvd bcn_init_pos msg irregular
+bool dn_pos_recvd:	Recvd and saved Dn_pos via Dn_status_map topic
+
+SUBSCRIBE TO
+Triang:		Receives triang msgs from Bcns before forwarding
+Bcn_init_pos: 	Receives Bcn pos coords at init to save in map
+Dn_ctrl:	Receives Movement instr from DCS and moves Dn
+Dn_status_map:	Receives Dn pos coords to save in map
+
+PUBLISH TO
+Triang_demo:	Publishes triang msgs with delay for Dn to calc pos
+Loc_sim_calc:	Publishes triang msgs delay from map calculation method
+
+INIT VARS
+n/a
+
+DEMO MODE
+Instead of going directly to Dn_node from Beacon_node,
+TRIANG msg sent via Loc_sim with added delay.
+This simulates sound travel duration through space.
+Loc_sim calcs Beacon delays, adds delay to triang msgs.
+
+Contraspect Drone Location and Navigation System
+Budapest University of Technology and Economics
+Department of Telecommunications and Media Informatics
+Author: Áron Hajdu-Moharos
+Consultant: Dr. Gábor Fehér
+August 2023 AD
