@@ -6,6 +6,10 @@ Department of Telecommunications and Media Informatics
 Author: Áron Hajdu-Moharos
 Consultant: Dr. Gábor Fehér
 
+BEFORE USING DO THIS:
+cd ~/catkin_ws # or equivalent
+mv src/contraspect/contraspect* src
+
 Upload all to Github now.
 Show me the added status decreasing in Loc_sim
 Show me the delays stored in Dn
