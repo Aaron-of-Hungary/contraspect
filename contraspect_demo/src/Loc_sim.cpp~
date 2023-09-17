@@ -18,8 +18,7 @@
 
 constexpr char FILENAME[] = "/home/george/catkin_ws/src/contraspect_demo/txt/Loc_sim_info.txt",
       	       DNS[] 	  = "Dn_status_map";
-constexpr double EPSILON    = 0.2     ,  /* Drone displace to trigger pos recalc. NONZERO! */
-  	  	 SMALLVALUE = 0.000001;
+constexpr double EPSILON      = 0.2;  /* Drone displace to trigger pos recalc. NONZERO! */
 
 double map[cspect::BEACONS_NUM+1][3] =
   {{0.0,0.0,0.0},{0.0,0.0,0.0},{0.0,0.0,0.0},{0.0,0.0,0.0},{0.0,0.0,0.0}};
@@ -73,12 +72,10 @@ int main(int argc, char **argv){
       DnPosArg = cspect::arg3D(map[0]);
       for(size_t ii = 0; ii!= cspect::BEACONS_NUM; ii++)
 	distSumSq = distSumSq + pow(beacons_dist[ii], 2.0);
-      if(!(cntr%cspect::DHZ_100)){
-	for(size_t ii = 0; ii!=3; ii++){
-	  map[0][ii] = map[0][ii] + status[ii] * (pow(0.5, 6.0));
-	  status[ii] = status[ii] - status[ii] * (pow(0.5, 6.0));
-	}
-	ROS_INFO("Statusx,y,z=%f,%f,%f",status[0],status[1],status[2]);
+      for(size_t ii = 0; ii!=3; ii++){
+	map[0][ii] = map[0][ii] + status[ii] * pow(0.5, 1.0/cspect::DPERIOD);
+	status[ii] = status[ii] - status[ii] * pow(0.5, 1.0/cspect::DPERIOD);
+	if(moveSize>EPSILON) ROS_INFO("Status x,y,z=%f,%f,%f",status[0],status[1],status[2]);
       }
       //}
     

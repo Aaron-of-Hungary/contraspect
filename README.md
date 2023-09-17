@@ -7,10 +7,9 @@ Author: Áron Hajdu-Moharos
 Consultant: Dr. Gábor Fehér
 
 BEFORE USING DO THIS:
-cd ~/catkin_ws # or equivalent
+roscd && cd ..
 mv src/contraspect/contraspect* src
 
-Upload all to Github now.
 Show me the added status decreasing in Loc_sim
 Show me the delays stored in Dn
 Show me Dn_calc, Loc_sim_calc
