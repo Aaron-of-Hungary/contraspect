@@ -29,9 +29,7 @@ Dn_node non Demo mode move from Dn_ctrl
 Rewrite Loc_sim Dn_node and Bcn_node info.txt(x2): omit init order
 Rewrite all nodes to reflect services, new variables, etc
 Create overview diagram with full explanation of function
-
-Fixed-Topic_spy-activeTopic_rossub-added-case-Dn_calc. Fixed-Dn_node-triang_recvd-update. Changed-Dn_calc-Loc_sim_calc-publish-speed.
-
+Instructions: at least 3 NON-COPLANAR (and non-colinear) homing beacons
 Edit in graph: Loc_sim no sub Bcn_init_pos
 Non-fatal error: Dcs-A at node shutdown: "segmentation fault (core dumped)"
 

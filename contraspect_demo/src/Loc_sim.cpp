@@ -62,34 +62,33 @@ int main(int argc, char **argv){
   /* Initializing additional variables */
   double moveSize = 0.0, DnPosArg = 0.0, distSumSq = 0.0;
   size_t cntr = 0;
+  bool delay_recalc = false;
   
   /* Loop begin */
   ros::Rate loopRate(pow(cspect::DPERIOD, -1.0));
   while(ros::ok()){
     
     /* Adjust drone pos */
-    // if(!(cntr%cspect::DHZ_100)){
-      moveSize  = cspect::arg3D(status);
-      DnPosArg = cspect::arg3D(map[0]);
-      for(size_t ii = 0; ii!= cspect::BEACONS_NUM; ii++)
-	distSumSq = distSumSq + pow(beacons_dist[ii], 2.0);
-      if(!(cntr%cspect::DHZ_100)){
-	for(size_t ii = 0; ii!=3; ii++){
-	  map[0][ii] = map[0][ii] + status[ii] * (pow(0.5, 6.0));
-	  status[ii] = status[ii] - status[ii] * (pow(0.5, 6.0));
-	}
-	ROS_INFO("Statusx,y,z=%f,%f,%f",status[0],status[1],status[2]);
+    moveSize  = cspect::arg3D(status);
+    DnPosArg = cspect::arg3D(map[0]);
+    for(size_t ii = 0; ii!= cspect::BEACONS_NUM; ii++)
+      distSumSq = distSumSq + pow(beacons_dist[ii], 2.0);
+    if(!(cntr%cspect::D_10ms)){
+      for(size_t ii = 0; ii!=3; ii++){
+	map[0][ii] = map[0][ii] + status[ii] * (pow(0.5, 6.0));
+	status[ii] = status[ii] - status[ii] * (pow(0.5, 6.0));
       }
-      //}
-    
-    /* Calculate delays and publish to Loc_sim_calc topic - Publish speed: 100Hz */
-    bool delay_recalc = false;
-    if(moveSize / DnPosArg > EPSILON) delay_recalc = true; /* If Dn to move */
-    else if(distSumSq < EPSILON) delay_recalc = true; /* If dists not yet adjusted */
-    if(delay_recalc)
-      /* Publish speed encoded in this function: 100Hz */
+      /*ROS_INFO("Statusx,y,z=%f,%f,%f",status[0],status[1],status[2]);*/
+    }
+
+    /* If Dn needs to move, flag to recalculate Triang forwarding delays */
+    delay_recalc = false;
+    if(moveSize / DnPosArg > EPSILON) delay_recalc = true; /* If Dn move call from DCS */
+    else if(distSumSq < pow(EPSILON, 2.0)) delay_recalc = true; /* If dists not yet adjusted */
+    /* Calculate Triang msg fwd delays, publish Loc_sim_calc. Speed: 1Hz*/
+    if(delay_recalc && !(cntr%(cspect::D_10ms*100)))
       delaysCalc(beacons_delay, beacons_dist, map, pub_Loc_sim_calc, cspect::BEACONS_NUM, cntr);
-    /*ROS_INFO("Calculated delays and published to Loc_sim_calc topic.");*/
+    else if(!delay_recalc && !(cntr%(cspect::D_10ms*100))) ROS_INFO("No delays recalc.");
 
     /* Wait delay and publish to Triang_demo topic */
     for(size_t ii = 0; ii!= cspect::BEACONS_NUM; ii++)
@@ -111,7 +110,7 @@ int main(int argc, char **argv){
 	  pub_Triang_demo.publish(msg_Triang_demo);
 	  delay_counter[ii] = 0.0;
 	  triang_sent[ii] = true;
-	  /*ROS_INFO("Triang %d delay %f fwd Triang_demo topic.", ii, beacons_delay[ii]);*/
+	  /*ROS_INFO("Triang %lu delay %f fwd Triang_demo topic.", ii+1, beacons_delay[ii]);*/
 	}	  
       }
 
@@ -178,29 +177,28 @@ void delaysCalc(double *Beacons_Delay, double *Beacons_Dist, double Map[][3], ro
     Beacons_Dist[ii] = pow(Beacons_Dist[ii], 0.5);
     Beacons_Delay[ii] = Beacons_Dist[ii] / cspect::SPEEDOFSOUND;
   }
-  /* Publish calculation to Loc_sim_calc topic. Publish speed: 100Hz */
-  if(!(Cntr%cspect::DHZ_100)){
-    std::stringstream ss;
-    ss << "Position of drone."
-       << "\n\t[x, y, z ] = [" << Map[0][0] << ", " << Map[0][1] << ", " << Map[0][2] << "]";
-    ss << "\nPosition of beacons."
-       << "\n\t[x1,y1,z1] = [" << Map[1][0] << ", " << Map[1][1] << ", " << Map[1][2] << "]"
-       << "\n\t[x2,y2,z2] = [" << Map[2][0] << ", " << Map[2][1] << ", " << Map[2][2] << "]"
-       << "\n\t[x3,y3,z3] = [" << Map[3][0] << ", " << Map[3][1] << ", " << Map[3][2] << "]"
-       << "\n\t[x4,y4,z4] = [" << Map[4][0] << ", " << Map[4][1] << ", " << Map[4][2] << "]";
-    ss << "\nBeacon distances."
-       << "\n\t[d1,d2,d3,d4] = [" << Beacons_Dist[0] << ", " << Beacons_Dist[1] << ", "
-       << Beacons_Dist[2] << ", " << Beacons_Dist[3] << "]";
-    ss << "\nCalculation."
-       << "\n\tdi = sqrt( (xi-x)^2 + (yi-y)^2 + (zi-z)^2 )";
-    ss << "\nBeacon delays to be added."
-       << "\n\tB1: " << Beacons_Delay[0] << "\tB2: " << Beacons_Delay[1]
-       <<   "\tB3: " << Beacons_Delay[2] << "\tB4: " << Beacons_Delay[3];
-    ss << "\nCalculation."
-       << "\n\tSpeed of sound: c = " << cspect::SPEEDOFSOUND << " m/s"
-       << "\n\tdelay = dist / c";
-    std_msgs::String msg_Loc_sim_calc;
-    msg_Loc_sim_calc.data = ss.str();
-    Pub_Loc_sim_calc.publish(msg_Loc_sim_calc);
-  }
+  /* Publish calculation to Loc_sim_calc topic. */
+  std::stringstream ss;
+  ss << "Position of drone."
+     << "\n\t[x, y, z ] = [" << Map[0][0] << ", " << Map[0][1] << ", " << Map[0][2] << "]";
+  ss << "\nPosition of beacons."
+     << "\n\t[x1,y1,z1] = [" << Map[1][0] << ", " << Map[1][1] << ", " << Map[1][2] << "]"
+     << "\n\t[x2,y2,z2] = [" << Map[2][0] << ", " << Map[2][1] << ", " << Map[2][2] << "]"
+     << "\n\t[x3,y3,z3] = [" << Map[3][0] << ", " << Map[3][1] << ", " << Map[3][2] << "]"
+     << "\n\t[x4,y4,z4] = [" << Map[4][0] << ", " << Map[4][1] << ", " << Map[4][2] << "]";
+  ss << "\nBeacon distances."
+     << "\n\t[d1,d2,d3,d4] = [" << Beacons_Dist[0] << ", " << Beacons_Dist[1] << ", "
+     << Beacons_Dist[2] << ", " << Beacons_Dist[3] << "]";
+  ss << "\nCalculation."
+     << "\n\tdi = sqrt( (xi-x)^2 + (yi-y)^2 + (zi-z)^2 )";
+  ss << "\nBeacon delays to be added."
+     << "\n\tB1: " << Beacons_Delay[0] << "\tB2: " << Beacons_Delay[1]
+     <<   "\tB3: " << Beacons_Delay[2] << "\tB4: " << Beacons_Delay[3];
+  ss << "\nCalculation."
+     << "\n\tSpeed of sound: c = " << cspect::SPEEDOFSOUND << " m/s"
+     << "\n\tdelay = dist / c";
+  std_msgs::String msg_Loc_sim_calc;
+  msg_Loc_sim_calc.data = ss.str();
+  Pub_Loc_sim_calc.publish(msg_Loc_sim_calc);
+  ROS_INFO("pub_Loc_sim_calc");
 }
