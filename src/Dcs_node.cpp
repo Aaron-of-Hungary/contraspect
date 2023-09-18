@@ -90,7 +90,7 @@ int main(int argc, char **argv){
 
     /* Publish Dn & Bcns visualize data to object_markers for Rviz - Publish speed: 100Hz */
     if(mode == A){
-      if(!(cntr%cspect::DHZ_100)){
+      if(!(cntr%cspect::D_10ms)){
 	for(size_t ii = 0; ii!=3; ii++)
 	  v[0][ii] = status_map[0][ii] + status_map[1][ii]; /* Dn pos + status = Dn future pos */
 	for(size_t ii = 1; ii!=cspect::BEACONS_NUM+2; ii++)

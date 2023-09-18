@@ -23,8 +23,8 @@ namespace cspect {
   		     /* Dn, Dcs, Loc_sim loop period	      		 */
   		     /* Due to all Beacons constantly publishing: 	 */
     		     DPERIOD      = BPERIOD/BEACONS_NUM;
-		     /* So many DPERIODs add up to 100 Hz:		 */
-  constexpr unsigned DHZ_100 	  = (unsigned)(0.01/DPERIOD+1.0);
+		     /* So many DPERIODs add up to 10 milliseconds:	 */
+  constexpr unsigned D_10ms 	  = (unsigned)(0.01/DPERIOD+1.0);
 
   unsigned lastdigit_msec(double X);
   unsigned ROS_INFO_F(const char *Filename);

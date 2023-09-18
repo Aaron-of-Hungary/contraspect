@@ -10,7 +10,16 @@ BEFORE USING DO THIS:
 roscd && cd ..
 mv src/contraspect/contraspect* src
 
-Show me the added status decreasing in Loc_sim
+What works:
+Dcs_A, Dcs_B, Dcs_C, Bcn_init_pos, Triang, Triang_demo, Loc_sim_calc, Loc_sim-Triang-fwd, Dn_status_map
+
+Check correctness of Dn_calc
+Add Beacon SNR weights
+If Dn_calc AND Loc_sim delay -> Dn delay fully reliable: dronePosCalc assign map[0] values
+Make Dn_node execute dronePosCalc, Loc_sim execute delaysCalc at 10Hz
+At 10Hz, Compare Loc_sim added Triang delay and Dn measured Triang delay
+Loc_sim alters delays to Dcs_C but all uniformly. Fix.
+Show me Loc_sim_calc, and make it work properly.
 Show me the delays stored in Dn
 Show me Dn_calc, Loc_sim_calc
 Now if need be cls for Topic_spy_*_calc
@@ -20,6 +29,8 @@ Dn_node non Demo mode move from Dn_ctrl
 Rewrite Loc_sim Dn_node and Bcn_node info.txt(x2): omit init order
 Rewrite all nodes to reflect services, new variables, etc
 Create overview diagram with full explanation of function
+
+Fixed-Topic_spy-activeTopic_rossub-added-case-Dn_calc. Fixed-Dn_node-triang_recvd-update. Changed-Dn_calc-Loc_sim_calc-publish-speed.
 
 Edit in graph: Loc_sim no sub Bcn_init_pos
 Non-fatal error: Dcs-A at node shutdown: "segmentation fault (core dumped)"

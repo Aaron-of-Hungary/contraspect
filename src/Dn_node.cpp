@@ -43,7 +43,7 @@ bool callback_Dn_ctrl(     contraspect_msgs::Dn_ctrl ::Request  &req,
 
 unsigned argvParse(int &Argc, char **Argv, bool &Demo, std::stringstream &SS, double Map[][3]);
 contraspect_msgs::Status_map setmsgDnStatusMap(double *Status, double Map[][3]);
-void dronePosCalc(double *Beacons_Delay, double *Beacons_Dist, double Map[][3], ros::Publisher
+unsigned dronePosCalc(double *Beacons_Delay,double *Beacons_Dist, double Map[][3], ros::Publisher
 		  &Pub_Dn_calc, const unsigned &N, std::stringstream &SS, const size_t &Cntr);
 
 
@@ -97,8 +97,8 @@ int main(int argc, char **argv){
     clk = clk + cspect::DPERIOD;
     /*ROS_INFO("Published to CLK topic");*/
 
-    /* Publish to Dn_status_map topic - publish speed: 100Hz */
-    if(!(cntr%cspect::DHZ_100)){
+    /* Publish to Dn_status_map topic - publish speed: 10Hz */
+    if(!(cntr%(cspect::D_10ms*10))){
       contraspect_msgs::Status_map msg_Dn_status_map = setmsgDnStatusMap(status, map);
       for(size_t ii = 0; ii!=3; ii++)
 	status[ii] = status[ii]-status[ii]*pow(0.5, 1.0/cspect::DPERIOD);
@@ -106,15 +106,16 @@ int main(int argc, char **argv){
     }
     /*ROS_INFO("Published to Dn_status_map topic");*/
     
-    /* Calculate position and publish to Dn_calc topic - publish speed: 100Hz */ 
-    triang_recvd[0] = true;
-    for(size_t ii = 1; ii!=cspect::BEACONS_NUM+1; ii++)
-      if(!triang_recvd[ii]) triang_recvd[0] = false;
-    if(triang_recvd[0]){ /* triang msgs arrived from all 4 bcns */
-      for(size_t ii = 1; ii!=cspect::BEACONS_NUM+1; ii++) triang_recvd[ii] = false;
-      /* Publish speed encoded in this function: 100Hz*/
-      dronePosCalc(beacons_delay, beacons_dist, map, pub_Dn_calc, cspect::BEACONS_NUM, ss, cntr);
-      ROS_INFO("pub_Dn_calc");
+    /* Calculate position and publish to Dn_calc topic - publish speed: 1Hz */
+    /* triang msgs arrived from all 4 bcns -> calculate drone position */
+    /* and publish to Dn_calc topic. Calc and publish speed: 1Hz       */
+    if(triang_recvd[0] && !(cntr%(cspect::D_10ms*100))){
+      ROS_INFO("triang_recvd:%d%d%d%d%d",(int)triang_recvd[0],(int)triang_recvd[1],
+	       (int)triang_recvd[2],(int)triang_recvd[3],(int)triang_recvd[4]);
+      for(size_t ii = 0; ii!=cspect::BEACONS_NUM+1; ii++) triang_recvd[ii] = false;
+      if(dronePosCalc(beacons_delay,beacons_dist,map,pub_Dn_calc,cspect::BEACONS_NUM,ss,cntr)){
+	ROS_ERROR("dronePosCalc ERROR");
+      }
     }   
 
     /* Loop end */
@@ -132,8 +133,20 @@ void callback_Triang(const contraspect_msgs::Triang::ConstPtr& msg){
       ROS_ERROR("Received Triang message thrown, irregular BID");
       return;
     }
-    beacons_delay[msg->bid-1] = clk-msg->timestamp;
-    // ROS_INFO("callback_Triang msg.bid,msg.tmstp,this.clk,dly=%d,%f,%f,%f", msg->bid, msg->timestamp,clk,beacons_delay[msg->bid-1]);
+    if(triang_recvd[msg->bid]); /*skip*/
+    else{
+      /* Mark triang received */
+      triang_recvd[msg->bid] = true;
+      /* Set beacons delay, mark triang received */
+      beacons_delay[msg->bid-1] = clk-msg->timestamp;
+      /* Check if all triang msgs received */
+      triang_recvd[0] = true;
+      for(size_t ii = 1; ii!=cspect::BEACONS_NUM+1; ii++)
+	if(!triang_recvd[ii]) triang_recvd[0] = false;
+      /* Ros Info regarding set delay */
+      ROS_INFO("callback_Triang. delay[%d]=Dn.clk-msg.tmstp=%f-%f=%f", 
+	       msg->bid,clk, msg->timestamp,beacons_delay[msg->bid-1]);
+    }
   }
 }
 
@@ -210,11 +223,11 @@ contraspect_msgs::Status_map setmsgDnStatusMap(double *Status, double Map[][3]){
   return res;
 }
 
-void dronePosCalc(double *Beacons_Delay, double *Beacons_Dist, double Map[][3], ros::Publisher
+unsigned dronePosCalc(double *Beacons_Delay,double *Beacons_Dist, double Map[][3], ros::Publisher
 		  &Pub_Dn_calc, const unsigned &N, std::stringstream &SS, const size_t &Cntr){
   /* N: Beacons_Num */
   /* Calculate bcn dist from bcn delay */ 
-  for(size_t ii = 0; ii!=3; ii++)
+  for(size_t ii = 0; ii!=N; ii++)
     Beacons_Dist[ii] = cspect::SPEEDOFSOUND * Beacons_Delay[ii];
   /*ROS_INFO("Calculate Bcn dist from delay success");*/ 
   /* Calculate dn pos from bcn dist.  d^2 = (xdn-xb)^2 + (ydn-yb)^2 + (zdn-zb)^2 */ 
@@ -237,59 +250,64 @@ void dronePosCalc(double *Beacons_Delay, double *Beacons_Dist, double Map[][3], 
   /* Matrix operations to calculate drone position. Operation: 
      x{3x1} = ((AT{3xn-1}xA{n-1x3})^-1{3x3} x AT{3xn-1}){3xn-1} x b{n-1x1}
      Legend: {dimension}, T: transpose, x: multiply */
-  Eigen::MatrixXd x = ((mtxA.transpose()*mtxA).inverse()*(mtxA.transpose()))*vecb;
+  Eigen::MatrixXd X = ((mtxA.transpose()*mtxA).inverse()*(mtxA.transpose()))*vecb;
+  for(size_t ii=0; ii!=3; ii++)
+    if(std::isnan(X(ii,0))){
+      ROS_ERROR("dronePosCalc fatal error. Likely solution: Let there be at least 3 NON-COPLANAR (and non-colinear) beacons for successful Drone multilateration");
+      return 1;
+      /* Setting Drone position values */
+    } /*else Map[0][ii] = X(ii,0);*/
   /*ROS_INFO("Calculate Dn pos from Bcn dist success");*/
-  /* Writing out the calculation. Like loc_sim. Publishing to Dn_calc. Publish speed: 100Hz */
-  if(!(Cntr%cspect::DHZ_100)){
-    SS.str("");
-    cspect::ssEnd(SS);
-    SS << "\nBeacon delays received via Triang topic."
-       << "\n\tB1: " << std::to_string(Beacons_Delay[0])
-       <<   "\tB2: " << std::to_string(Beacons_Delay[1])
-       <<   "\tB3: " << std::to_string(Beacons_Delay[2])
-       <<   "\tB4: " << std::to_string(Beacons_Delay[3]);
-    SS << "\nBeacon distances calculated from delays."
-       << "\n\t[d1,d2,d3,d4] = [" << Beacons_Dist[0] << ", " << Beacons_Dist[1] << ", "
-       << Beacons_Dist[2] << ", " << Beacons_Dist[3] << "]";
-    SS << "\nCalculation."
-       << "\n\tSpeed of sound: c = " << cspect::SPEEDOFSOUND << " m/s"
-       << "\n\tdist = delay * c";
-    SS << "\nPosition of beacons received via Bcn_init_pos topic."
-       << "\n\t[x1,y1,z1] = [" << Map[1][0] << ", " << Map[1][1] << ", " << Map[1][2] << "]"
-       << "\n\t[x2,y2,z2] = [" << Map[2][0] << ", " << Map[2][1] << ", " << Map[2][2] << "]"
-       << "\n\t[x3,y3,z3] = [" << Map[3][0] << ", " << Map[3][1] << ", " << Map[3][2] << "]"
-       << "\n\t[x4,y4,z4] = [" << Map[4][0] << ", " << Map[4][1] << ", " << Map[4][2] << "]";
-    SS << "\nPosition of drone calculated from beacon distances."
-       << "\n\t[x, y, z ] = [" << Map[0][0] << ", " << Map[0][1] << ", " << Map[0][2] << "]";
-    SS << "\nCreation of A matrix.";
-    for(size_t ii = 0, jj = N/2-1; ii!=N-1; ii++){
-      SS << "\n\t";
-      if(ii==jj) SS << "A =";
-      SS << "\t[ 2(x" << N << "-x" << ii+1 
-	 <<   ") 2(y" << N << "-y" << ii+1 
-	 <<   ") 2(z" << N << "-z" << ii+1 << ") ]";
-      if(ii==jj) SS << "=";
-      SS << "\t[";
-      for(size_t kk = 0; kk!=3; kk++) SS << " " << mtxA(ii,kk);
-      SS << " ]";
-    }
-    SS << "\nCreation of b vector.";
-    for(size_t ii = 0, jj = N/2-1; ii!=N-1; ii++){
-      SS << "\n\t";
-      if(ii==jj) SS << "b =";
-      SS << "\t[ d" << ii+1 << "^2-d" << N
-	 << "^2-x"  << ii+1 << "^2-y" << ii+1 << "^2-z" << ii+1
-	 << "^2+x"  << N    << "^2+y" << N    << "^2+z" << N    << " ]";
-      if(ii==jj) SS << " =";
-      SS << "\t[ " << vecb(ii,0) << " ]";
-    }
-    SS << "\nCalculate Dn pos."
-       << "\n\tx = ((AT*A)^-1 * AT) * b"
-       << "\n\nLegend: x: drone pos vector [x y z], T: mtx transpose";
-    /* Publishing to Dn_calc*/ 
-    std_msgs::String msg_Dn_calc;
-    msg_Dn_calc.data = SS.str();
-    Pub_Dn_calc.publish(msg_Dn_calc);
-    /*ROS_INFO("Published to Dn_calc topic");*/
+  /* Writing out the calculation, publishing to Dn_calc. Like loc_sim. */
+  SS.str("");
+  cspect::ssEnd(SS);
+  SS << "\nBeacon delays received via Triang topic."
+     << "\n\tB1: " << std::to_string(Beacons_Delay[0])
+     <<   "\tB2: " << std::to_string(Beacons_Delay[1])
+     <<   "\tB3: " << std::to_string(Beacons_Delay[2])
+     <<   "\tB4: " << std::to_string(Beacons_Delay[3]);
+  SS << "\nBeacon distances calculated from delays."
+     << "\n\t[d1,d2,d3,d4] = [" << Beacons_Dist[0] << ", " << Beacons_Dist[1] << ", "
+     << Beacons_Dist[2] << ", " << Beacons_Dist[3] << "]";
+  SS << "\nCalculation."
+     << "\n\tSpeed of sound: c = " << cspect::SPEEDOFSOUND << " m/s"
+     << "\n\tdist = delay * c";
+  SS << "\nPosition of beacons received via Bcn_init_pos topic."
+     << "\n\t[x1,y1,z1] = [" << Map[1][0] << ", " << Map[1][1] << ", " << Map[1][2] << "]"
+     << "\n\t[x2,y2,z2] = [" << Map[2][0] << ", " << Map[2][1] << ", " << Map[2][2] << "]"
+     << "\n\t[x3,y3,z3] = [" << Map[3][0] << ", " << Map[3][1] << ", " << Map[3][2] << "]"
+     << "\n\t[x4,y4,z4] = [" << Map[4][0] << ", " << Map[4][1] << ", " << Map[4][2] << "]";
+  SS << "\nPosition of drone calculated from beacon distances."
+     << "\n\t[x, y, z ] = [" << X(0,0) << ", " << X(1,0) << ", " << X(2,0) << "]";
+  SS << "\nCreation of A matrix.";
+  for(size_t ii = 0, jj = N/2-1; ii!=N-1; ii++){
+    SS << "\n\t";
+    if(ii==jj) SS << "A =";
+    SS << "\t[ 2(x" << N << "-x" << ii+1 
+       <<   ") 2(y" << N << "-y" << ii+1 
+       <<   ") 2(z" << N << "-z" << ii+1 << ") ]";
+    if(ii==jj) SS << "=";
+    SS << "\t[";
+    for(size_t kk = 0; kk!=3; kk++) SS << "\t" << mtxA(ii,kk);
+    SS << "\t]";
   }
+  SS << "\nCreation of b vector.";
+  for(size_t ii = 0, jj = N/2-1; ii!=N-1; ii++){
+    SS << "\n\t";
+    if(ii==jj) SS << "b =";
+    SS << "\t[ d" << ii+1 << "^2-d" << N
+       << "^2-x"  << ii+1 << "^2-y" << ii+1 << "^2-z" << ii+1
+       << "^2+x"  << N    << "^2+y" << N    << "^2+z" << N    << "^2 ]";
+    if(ii==jj) SS << " =";
+    SS << "\t[ " << vecb(ii,0) << " ]";
+  }
+  SS << "\nCalculate Dn pos."
+     << "\n\tx = ((AT*A)^-1 * AT) * b"
+     << "\n\nLegend: x: drone pos vector [x y z], T: mtx transpose";
+  /* Publishing to Dn_calc*/ 
+  std_msgs::String msg_Dn_calc;
+  msg_Dn_calc.data = SS.str();
+  Pub_Dn_calc.publish(msg_Dn_calc);
+  ROS_INFO("pub_Dn_calc");
+  return 0;
 }
