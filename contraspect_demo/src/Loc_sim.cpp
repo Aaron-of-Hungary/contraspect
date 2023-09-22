@@ -65,7 +65,7 @@ int main(int argc, char **argv){
   bool delay_recalc = false;
   
   /* Loop begin */
-  ros::Rate loopRate(pow(cspect::DPERIOD, -1.0));
+  ros::Rate loopRate(pow(cspect::PERIOD, -1.0));
   while(ros::ok()){
     
     /* Adjust drone pos */
@@ -73,7 +73,7 @@ int main(int argc, char **argv){
     DnPosArg = cspect::arg3D(map[0]);
     for(size_t ii = 0; ii!= cspect::BEACONS_NUM; ii++)
       distSumSq = distSumSq + pow(beacons_dist[ii], 2.0);
-    if(!(cntr%cspect::D_10ms)){
+    if(!(cntr%cspect::P_10ms)){
       for(size_t ii = 0; ii!=3; ii++){
 	map[0][ii] = map[0][ii] + status[ii] * (pow(0.5, 6.0));
 	status[ii] = status[ii] - status[ii] * (pow(0.5, 6.0));
@@ -86,9 +86,9 @@ int main(int argc, char **argv){
     if(moveSize / DnPosArg > EPSILON) delay_recalc = true; /* If Dn move call from DCS */
     else if(distSumSq < pow(EPSILON, 2.0)) delay_recalc = true; /* If dists not yet adjusted */
     /* Calculate Triang msg fwd delays, publish Loc_sim_calc. Speed: 1Hz*/
-    if(delay_recalc && !(cntr%(cspect::D_10ms*100)))
+    if(delay_recalc && !(cntr%(cspect::P_10ms*100)))
       delaysCalc(beacons_delay, beacons_dist, map, pub_Loc_sim_calc, cspect::BEACONS_NUM, cntr);
-    else if(!delay_recalc && !(cntr%(cspect::D_10ms*100))) ROS_INFO("No delays recalc.");
+    else if(!delay_recalc && !(cntr%(cspect::P_10ms*100))) ROS_INFO("No delays recalc.");
 
     /* Wait delay and publish to Triang_demo topic */
     for(size_t ii = 0; ii!= cspect::BEACONS_NUM; ii++)
@@ -100,17 +100,18 @@ int main(int argc, char **argv){
       else if( triang_recvd[ii] &&  triang_sent[ii]) triang_recvd[ii] = false;
       /* Waiting to send */
       else if( triang_recvd[ii] && !triang_sent[ii]){
-	/* Waiting to send, Add delay of size cspect::DPERIOD */
+	/* Waiting to send, Add delay of size cspect::PERIOD */
 	if(delay_counter[ii]<beacons_delay[ii])
-	  delay_counter[ii] = delay_counter[ii] + cspect::DPERIOD; 
+	  delay_counter[ii] = delay_counter[ii] + cspect::PERIOD; 
 	/* Waited delay, send */
 	else{
 	  msg_Triang_demo.timestamp = recvd_timestamp[ii];
 	  msg_Triang_demo.bid = ii+1;
 	  pub_Triang_demo.publish(msg_Triang_demo);
-	  delay_counter[ii] = 0.0;
 	  triang_sent[ii] = true;
-	  /*ROS_INFO("Triang %lu delay %f fwd Triang_demo topic.", ii+1, beacons_delay[ii]);*/
+	  ROS_INFO("Triang %lu sent. Delays: Calc,Actual: %f,%f",
+		   ii+1, beacons_delay[ii], delay_counter[ii]);
+	  delay_counter[ii] = 0.0;
 	}	  
       }
 

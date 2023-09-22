@@ -63,10 +63,8 @@ int main(int argc, char **argv){
   bool msg = true;
   if(activeTopic==Clk_sync||activeTopic==Bcn_init_pos||activeTopic==Dn_ctrl) msg = false;
   std::stringstream ss;
-  if(activeTopic) ss.str("_");
-  cspect::ssEnd(ss);
-  ss << activeTopic_str(activeTopic);
-  cspect::ssAddFront("Topic_spy", ss);
+  ss << "Topic_spy";
+  if(activeTopic) ss << "_" << activeTopic_str(activeTopic);
   std::string s = ss.str();
   ros::init(argc, argv, s.c_str());
   ros::NodeHandle n;
@@ -104,6 +102,8 @@ unsigned argvParse(int &Argc, char **Argv, enum tType &ActiveTopic){
     ROS_ERROR("Parse argv error. Incorrect format.\nTry: Dn_status_map, Clk_sync, Dn_ctrl, Dn_calc, Loc_sim_calc, CLK, Triang, Triang_demo, Bcn_init_pos, object_markers");
     return 1;
   }
+  s = activeTopic_str(ActiveTopic);
+  ROS_INFO("argvParse. ActiveTopic=\"%s\"",s.c_str());
   return 0;
 }
 
@@ -127,6 +127,7 @@ std::string activeTopic_str(enum tType &ActiveTopic) {
 
 ros::Subscriber activeTopic_rossub(enum tType &ActiveTopic, ros::NodeHandle &N){
   switch (ActiveTopic){
+  case Dn_calc:       return N.subscribe("Dn_calc"      ,cspect::SUBRATE,callback_Dn_calc      );
   case Dn_status_map: return N.subscribe("Dn_status_map",cspect::SUBRATE,callback_Dn_status_map);
   case Loc_sim_calc:  return N.subscribe("Loc_sim_calc" ,cspect::SUBRATE,callback_Loc_sim_calc );
   case CLK: 	      return N.subscribe("CLK"          ,cspect::SUBRATE,callback_CLK          );

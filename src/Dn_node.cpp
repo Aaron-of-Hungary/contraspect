@@ -30,7 +30,8 @@ float clk = 0.0;
 double beacons_delay[cspect::BEACONS_NUM] = {0.0,0.0,0.0,0.0},
        beacons_dist [cspect::BEACONS_NUM] = {0.0,0.0,0.0,0.0};
 /* [0] true only if all others true. default false */
-bool triang_recvd[cspect::BEACONS_NUM+1] =  {false,false,false,false,false};
+bool triang_recvd[cspect::BEACONS_NUM+1] =  {false,false,false,false,false},
+  clk_syncd = false;
 size_t cntr = 0;
 
 void callback_Triang(const contraspect_msgs::Triang::ConstPtr& msg); 
@@ -43,8 +44,8 @@ bool callback_Dn_ctrl(     contraspect_msgs::Dn_ctrl ::Request  &req,
 
 unsigned argvParse(int &Argc, char **Argv, bool &Demo, std::stringstream &SS, double Map[][3]);
 contraspect_msgs::Status_map setmsgDnStatusMap(double *Status, double Map[][3]);
-unsigned dronePosCalc(double *Beacons_Delay,double *Beacons_Dist, double Map[][3], ros::Publisher
-		  &Pub_Dn_calc, const unsigned &N, std::stringstream &SS, const size_t &Cntr);
+unsigned dronePosCalc(double *Delays,double *Dists, double Map[][3], ros::Publisher &Pub_Dn_calc,
+		      const unsigned &N, const double W[], std::stringstream &SS);
 
 
 int main(int argc, char **argv){
@@ -85,23 +86,27 @@ int main(int argc, char **argv){
    ser_Bcn_init_pos      = n.advertiseService("Bcn_init_pos", callback_Bcn_init_pos);
    if(!demo) ser_Dn_ctrl = n.advertiseService("Dn_ctrl"     , callback_Dn_ctrl     );
 
+  /* Initialize other variables */
+  bool first_dronePosCalc = true;
+
   /* Loop begin */
-  ros::Rate loopRate(pow(cspect::DPERIOD, -1.0));
+  ros::Rate loopRate(pow(cspect::PERIOD, -1.0));
   while(ros::ok()){
 
-    /* Publish to CLK topic */  
-    contraspect_msgs::CLK msg_CLK;
-    msg_CLK.clk = clk;
-    msg_CLK.bid = (uint8_t)0;
-    pub_CLK.publish(msg_CLK);
-    clk = clk + cspect::DPERIOD;
-    /*ROS_INFO("Published to CLK topic");*/
+    /* Publish to CLK topic */
+    if(cspect::lastdigit_msec(clk)==0 && !(cntr%(cspect::BEACONS_NUM+1))){
+      contraspect_msgs::CLK msg_CLK;
+      msg_CLK.clk = clk;
+      msg_CLK.bid = (uint8_t)0;
+      pub_CLK.publish(msg_CLK);
+      /*ROS_INFO("Published to CLK topic");*/
+    }
 
     /* Publish to Dn_status_map topic - publish speed: 10Hz */
-    if(!(cntr%(cspect::D_10ms*10))){
+    if(!(cntr%(cspect::P_10ms*10))){
       contraspect_msgs::Status_map msg_Dn_status_map = setmsgDnStatusMap(status, map);
       for(size_t ii = 0; ii!=3; ii++)
-	status[ii] = status[ii]-status[ii]*pow(0.5, 1.0/cspect::DPERIOD);
+	status[ii] = status[ii]-status[ii]*pow(0.5, 1.0/cspect::PERIOD);
       pub_Dn_status_map.publish(msg_Dn_status_map);
     }
     /*ROS_INFO("Published to Dn_status_map topic");*/
@@ -109,19 +114,22 @@ int main(int argc, char **argv){
     /* Calculate position and publish to Dn_calc topic - publish speed: 1Hz */
     /* triang msgs arrived from all 4 bcns -> calculate drone position */
     /* and publish to Dn_calc topic. Calc and publish speed: 1Hz       */
-    if(triang_recvd[0] && !(cntr%(cspect::D_10ms*100))){
+    if(triang_recvd[0] && (!(cntr%(cspect::P_10ms*100))||first_dronePosCalc)){
+      if(first_dronePosCalc) first_dronePosCalc = false;
       ROS_INFO("triang_recvd:%d%d%d%d%d",(int)triang_recvd[0],(int)triang_recvd[1],
 	       (int)triang_recvd[2],(int)triang_recvd[3],(int)triang_recvd[4]);
       for(size_t ii = 0; ii!=cspect::BEACONS_NUM+1; ii++) triang_recvd[ii] = false;
-      if(dronePosCalc(beacons_delay,beacons_dist,map,pub_Dn_calc,cspect::BEACONS_NUM,ss,cntr)){
-	ROS_ERROR("dronePosCalc ERROR");
-      }
-    }   
+      if(dronePosCalc(beacons_delay,beacons_dist,map,pub_Dn_calc,
+		      cspect::BEACONS_NUM,cspect::BEACONS_WEIGHT,ss))
+	ROS_ERROR("dronePosCalc ERROR");      
+    }
 
     /* Loop end */
     ros::spinOnce();
     loopRate.sleep();
     cntr = cntr + 1;
+    if(clk>2047.01) clk = clk-2047.01;
+    clk = clk + cspect::PERIOD;
   }
   return 0;
 }
@@ -130,7 +138,7 @@ void callback_Triang(const contraspect_msgs::Triang::ConstPtr& msg){
   if(msg){
     /* Check if received data irregular */
     if(msg->bid<1||msg->bid>4){ /* bid irregular */
-      ROS_ERROR("Received Triang message thrown, irregular BID");
+      ROS_ERROR("Received Triang message thrown, irregular BID %d",(int)msg->bid);
       return;
     }
     if(triang_recvd[msg->bid]); /*skip*/
@@ -172,15 +180,29 @@ bool callback_Dn_ctrl(contraspect_msgs::Dn_ctrl::Request  &req,
   status[2] = status[2] + req.z;
   ROS_INFO("callback_Dn_ctrl");
   return true;
-}  
+}
 bool callback_Clk_sync(contraspect_msgs::Clk_sync::Request  &req,
 		       contraspect_msgs::Clk_sync::Response &res){
-  if(req.all_syncd == (uint8_t)0){
+  switch(req.all_syncd){
+  case (uint8_t)0:
     clk = 0.0;
-    ROS_INFO("callback_Clk_sync not final");
-  } else ROS_INFO("callback_Clk_sync final");
+    cntr = 0;
+    ROS_INFO("callback_Clk_sync 0");
+    break;
+  case (uint8_t)1:
+    clk_syncd = true;
+    ROS_INFO("callback_Clk_sync 1");
+    break;
+  case (uint8_t)2:
+    clk = clk + req.x;
+    ROS_INFO("callback_Clk_sync 2");
+    break;
+  default:
+    ROS_WARN("callback_Clk_sync n/a");
+    break;
+  }
   return true;
-} 
+}
 
 unsigned argvParse(int &Argc, char **Argv, bool &Demo, std::stringstream &SS, double Map[][3]){
   /* Checking argc */
@@ -223,12 +245,12 @@ contraspect_msgs::Status_map setmsgDnStatusMap(double *Status, double Map[][3]){
   return res;
 }
 
-unsigned dronePosCalc(double *Beacons_Delay,double *Beacons_Dist, double Map[][3], ros::Publisher
-		  &Pub_Dn_calc, const unsigned &N, std::stringstream &SS, const size_t &Cntr){
-  /* N: Beacons_Num */
+unsigned dronePosCalc(double *Delays,double *Dists, double Map[][3], ros::Publisher &Pub_Dn_calc,
+		      const unsigned &N, const double W[], std::stringstream &SS){
+  /* N: Beacons_Num, W: Beacon_Weight */
+  /* Compare Map, W arrays size to N. No more, no less. */ //
   /* Calculate bcn dist from bcn delay */ 
-  for(size_t ii = 0; ii!=N; ii++)
-    Beacons_Dist[ii] = cspect::SPEEDOFSOUND * Beacons_Delay[ii];
+  for(size_t ii = 0; ii!=N; ii++) Dists[ii] = cspect::SPEEDOFSOUND * Delays[ii];
   /*ROS_INFO("Calculate Bcn dist from delay success");*/ 
   /* Calculate dn pos from bcn dist.  d^2 = (xdn-xb)^2 + (ydn-yb)^2 + (zdn-zb)^2 */ 
   Eigen::MatrixXd mtxA(N-1, 3); // this might break it. if yes, initialize matrices properly
@@ -236,16 +258,17 @@ unsigned dronePosCalc(double *Beacons_Delay,double *Beacons_Dist, double Map[][3
   /* Filling up A matrix - works with variable Beacons_Num 
      Values: twice distance of final bcn from other bcns
      Dimensions: n-1x3, n=Beacons_Num */
+  /* Checked, correct. */
   for(size_t ii = 0; ii!= N-1; ii++)
-    for(size_t jj = 0; jj!=3; jj++)
-      mtxA(ii,jj) = 2.0*(Map[N][jj]-Map[ii+1][jj]); /* Checked, correct. */
+    for(size_t jj = 0; jj!=3; jj++) mtxA(ii,jj) = W[ii]/W[N-1]*2.0*(Map[N][jj]-Map[ii+1][jj]);
   /* Filling up b vector - works with variable Beacons_Num  
      Values: as you see 
      Dimensions: n-1x1 */
   for(size_t ii = 0; ii!= N-1; ii++){
-    vecb(ii,0)=pow(Beacons_Dist[ii], 2.0)-pow(Beacons_Dist[N-1], 2.0);
+    vecb(ii,0)=pow(Dists[ii], 2.0)-pow(Dists[N-1], 2.0);
     for(size_t jj = 0; jj!=3; jj++)
       vecb(ii,0) = vecb(ii,0) + pow(Map[N][jj], 2.0) - pow(Map[ii+1][jj], 2.0);
+    vecb(ii,0) = W[ii]/W[N-1]*vecb(ii,0);
   }
   /* Matrix operations to calculate drone position. Operation: 
      x{3x1} = ((AT{3xn-1}xA{n-1x3})^-1{3x3} x AT{3xn-1}){3xn-1} x b{n-1x1}
@@ -262,13 +285,13 @@ unsigned dronePosCalc(double *Beacons_Delay,double *Beacons_Dist, double Map[][3
   SS.str("");
   cspect::ssEnd(SS);
   SS << "\nBeacon delays received via Triang topic."
-     << "\n\tB1: " << std::to_string(Beacons_Delay[0])
-     <<   "\tB2: " << std::to_string(Beacons_Delay[1])
-     <<   "\tB3: " << std::to_string(Beacons_Delay[2])
-     <<   "\tB4: " << std::to_string(Beacons_Delay[3]);
+     << "\n\tB1: " << std::to_string(Delays[0])
+     <<   "\tB2: " << std::to_string(Delays[1])
+     <<   "\tB3: " << std::to_string(Delays[2])
+     <<   "\tB4: " << std::to_string(Delays[3]);
   SS << "\nBeacon distances calculated from delays."
-     << "\n\t[d1,d2,d3,d4] = [" << Beacons_Dist[0] << ", " << Beacons_Dist[1] << ", "
-     << Beacons_Dist[2] << ", " << Beacons_Dist[3] << "]";
+     << "\n\t[d1,d2,d3,d4] = ["
+     << Dists[0] << ", " << Dists[1] << ", " << Dists[2] << ", " << Dists[3] << "]";
   SS << "\nCalculation."
      << "\n\tSpeed of sound: c = " << cspect::SPEEDOFSOUND << " m/s"
      << "\n\tdist = delay * c";

@@ -1,10 +1,10 @@
-/**
+/***
   Title: contraspect_h
   Author: Aron Hajdu-Moharos
   Filename: contraspect/include/contraspect/contraspect.h
   Description: Function declarations for the contraspect/contraspect.h library
   Project: Contraspect Drone Location and Navigation System
-**/
+***/
 
 #ifndef CONTRASPECT_CONTRASPECT_H
 #define CONTRASPECT_CONTRASPECT_H
@@ -14,17 +14,20 @@
 #include <string>
 namespace cspect {
 
-  constexpr unsigned SUBRATE  = 1000,	   /* def 1000			 */
-  	  	     PUBRATE  = 1000, 	   /* def 1000 			 */
+  constexpr unsigned SUBRATE      = 1000,  /* def 1000			 */
+  	  	     PUBRATE      = 1000,  /* def 1000 			 */
     		     BEACONS_NUM  = 4;     /* def 4 			 */
   constexpr double   SPEEDOFSOUND = 343.0, /* in air, room temp: 343 m/s */
-                     /* NONZERO POSITIVE! Beacons Triang loop period.    */
-                     BPERIOD      = 0.0003,
-  		     /* Dn, Dcs, Loc_sim loop period	      		 */
-  		     /* Due to all Beacons constantly publishing: 	 */
-    		     DPERIOD      = BPERIOD/BEACONS_NUM;
-		     /* So many DPERIODs add up to 10 milliseconds:	 */
-  constexpr unsigned D_10ms 	  = (unsigned)(0.01/DPERIOD+1.0);
+		     /* Minimum Drone position resolution in meters	 */
+		     MINRES	  = 0.1,
+		     /* Maximum allowed delay to achieve min resolution	 */
+		     MAXDELAY	  = MINRES/SPEEDOFSOUND,
+                     /* Loop period all nodes, due to all Bcns publish   */
+                     PERIOD       = MAXDELAY/BEACONS_NUM,
+		     /* Added weight (eg. SNR) of beacons */
+		     BEACONS_WEIGHT[BEACONS_NUM] = {1.0,1.0,1.0,1.0};
+		     /* So many PERIODs add up to 10 milliseconds:	 */
+  constexpr unsigned P_10ms 	  = (unsigned)(0.01/PERIOD+1.0);
 
   unsigned lastdigit_msec(double X);
   unsigned ROS_INFO_F(const char *Filename);

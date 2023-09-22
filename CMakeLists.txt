@@ -234,6 +234,10 @@ target_include_directories(Dcs_node PRIVATE ${catkin_INCLUDE_DIRS} include)
 add_executable(Contraspect_info src/Contraspect_info.cpp)
 target_link_libraries (Contraspect_info ${catkin_LIBRARIES} contraspect_lib ${CURSES_LIBRARIES})
 target_include_directories(Contraspect_info PRIVATE ${catkin_INCLUDE_DIRS} include)
+#Init
+add_executable(Init src/Init.cpp)
+target_link_libraries (Init ${catkin_LIBRARIES} contraspect_lib ${CURSES_LIBRARIES})
+target_include_directories(Init PRIVATE ${catkin_INCLUDE_DIRS} include)
 #quicktest
 add_executable(quicktest src/quicktest.cpp)
 target_link_libraries (quicktest ${catkin_LIBRARIES} contraspect_lib ${CURSES_LIBRARIES})

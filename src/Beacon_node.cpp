@@ -20,6 +20,7 @@ float clk = 0.0;
 double pos[3] = {0.0,0.0,0.0};
 uint8_t bid = 0;
 bool clk_syncd = false;
+unsigned cntr = 0;
 
 bool callback_Clk_sync(contraspect_msgs::Clk_sync::Request  &req,
 		       contraspect_msgs::Clk_sync::Response &res);
@@ -63,26 +64,29 @@ int main(int argc, char **argv){
   srv_Bcn_init_pos.request.bid = bid;
   srv_Bcn_init_pos.response.bid = (uint8_t)(cspect::BEACONS_NUM*2);
   bool init_pos_done = false;
-  unsigned cntr = 0;
   
   /*Loop begin */
-  ros::Rate loopRate(pow(cspect::BPERIOD, -1.0));
+  ros::Rate loopRate(pow(cspect::PERIOD, -1.0));
   while(ros::ok()){
 
     /* Publish to Triang topic */
     /* publish for 1ms, then pause for 9ms */
-    if(clk_syncd && cspect::lastdigit_msec(clk) == 0){
-      msg_Triang.timestamp = clk;
-      msg_Triang.bid = bid;
-      pub_Triang.publish(msg_Triang);
-      ROS_INFO("pub Triang tmstp,bid=%f,%d",msg_Triang.timestamp,msg_Triang.bid);
+    if(cspect::lastdigit_msec(clk) == 0){
+      if(clk_syncd && !(cntr%cspect::BEACONS_NUM)){
+	msg_Triang.timestamp = clk;
+	msg_Triang.bid = bid;
+	pub_Triang.publish(msg_Triang);
+	ROS_INFO("pub Triang tmstp,bid=%f,%d",msg_Triang.timestamp,msg_Triang.bid);
+      }
+
+      /* Publish to CLK topic */
+      if(!(cntr%(cspect::BEACONS_NUM+1))){
+	msg_CLK.clk = clk;
+	msg_CLK.bid = bid;
+	pub_CLK.publish(msg_CLK);
+	/*ROS_INFO("CLK pub: {clk,bid}={%f,%d}",msg_CLK.clk,msg_CLK.bid);*/
+      }
     }
-      
-    /* Publish to CLK topic */
-    msg_CLK.clk = clk;
-    msg_CLK.bid = bid;
-    pub_CLK.publish(msg_CLK);
-    /*ROS_INFO("CLK pub: {clk,bid}={%f,%d}",msg_CLK.clk,msg_CLK.bid);*/
 
     /* Call Bcn_init_pos service */
     if(!init_pos_done && !((cntr/10)%10))
@@ -101,7 +105,8 @@ int main(int argc, char **argv){
     cntr = cntr + 1;
 
     /* Loop end */
-    clk = clk + cspect::BPERIOD;
+    clk = clk + cspect::PERIOD;
+    if(clk>2047.01) clk = clk-2047.01;
     ros::spinOnce();
     loopRate.sleep();
   }
@@ -112,12 +117,23 @@ int main(int argc, char **argv){
 
 bool callback_Clk_sync(contraspect_msgs::Clk_sync::Request  &req,
 		       contraspect_msgs::Clk_sync::Response &res){
-  if(req.all_syncd>0){
-    clk_syncd = true;
-    ROS_INFO("callback_Clk_sync final");
-  }else{
+  switch(req.all_syncd){
+  case (uint8_t)0:
     clk = 0.0;
-    ROS_INFO("callback_Clk_sync not final");
+    cntr = 0;
+    ROS_INFO("callback_Clk_sync 0");
+    break;
+  case (uint8_t)1:
+    clk_syncd = true;
+    ROS_INFO("callback_Clk_sync 1");
+    break;
+  case (uint8_t)2:
+    clk = clk + req.x;
+    ROS_INFO("callback_Clk_sync 2");
+    break;
+  default:
+    ROS_WARN("callback_Clk_sync n/a");
+    break;
   }
   return true;
 }

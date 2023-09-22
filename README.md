@@ -6,32 +6,45 @@ Department of Telecommunications and Media Informatics
 Author: Áron Hajdu-Moharos
 Consultant: Dr. Gábor Fehér
 
-BEFORE USING DO THIS:
-roscd && cd ..
-mv src/contraspect/contraspect* src
+BEFORE USING EXECUTE:
+roscd contraspect
+mv ./contraspect* ..
+
+BASE DELAYS
+Max allowed base delay in sec: 0.5*res/speedofsound
+res being the desired trilateration resolution in m
+0.5 because we send it twice: once to Loc_sim, then again to Drone
+Our desired resolution: 0.1 m -> Max allowed base delay: 0.5*0.1/343 = 0.000146 s
 
 What works:
-Dcs_A, Dcs_B, Dcs_C, Bcn_init_pos, Triang, Triang_demo, Loc_sim_calc, Loc_sim-Triang-fwd, Dn_status_map
+Dcs_A, Dcs_B, Dcs_C, Bcn_init_pos, Triang, Triang_demo, Loc_sim_calc, Loc_sim-Triang-fwd, Dn_status_map, Dn_calc
 
-Check correctness of Dn_calc
-Add Beacon SNR weights
-If Dn_calc AND Loc_sim delay -> Dn delay fully reliable: dronePosCalc assign map[0] values
-Make Dn_node execute dronePosCalc, Loc_sim execute delaysCalc at 10Hz
+What doesn't work:
+Triang added delay
+Beacon and Drone CLKs sync together
+
+Run catkin_ws, correct runtime errors, git commit.
+Current base delay: min 0.001, max 0.014
+To reduce base delay: better clk_sync -> more sophisticated Dcs-b.
+Fix: Dn-clk slower than Beacons-clk
+Check accuracy of Loc_sim added delays
 At 10Hz, Compare Loc_sim added Triang delay and Dn measured Triang delay
+dronePosCalc: compare map, w arrays size to N. no more, no less.
+If Dn_calc AND Loc_sim delay -> Dn delay fully reliable: dronePosCalc assign map[0] values
+Make Dn_node execute dronePosCalc, Loc_sim execute delaysCalc at 10Hz -> Dn_status_map at 20Hz
 Loc_sim alters delays to Dcs_C but all uniformly. Fix.
-Show me Loc_sim_calc, and make it work properly.
-Show me the delays stored in Dn
-Show me Dn_calc, Loc_sim_calc
 Now if need be cls for Topic_spy_*_calc
 First complete demo mode
-Dn and Bcn clks discrepancy. Dn clk slower than Bcns clk
 Dn_node non Demo mode move from Dn_ctrl
 Rewrite Loc_sim Dn_node and Bcn_node info.txt(x2): omit init order
 Rewrite all nodes to reflect services, new variables, etc
 Create overview diagram with full explanation of function
 Instructions: at least 3 NON-COPLANAR (and non-colinear) homing beacons
 Edit in graph: Loc_sim no sub Bcn_init_pos
-Non-fatal error: Dcs-A at node shutdown: "segmentation fault (core dumped)"
+
+Uniformized-loop-period-for-all-nodes-to-fix-clk-discrepancy. Added-dronePosCalc-beacons-weights. Added-DCS-B-finetuned-CLK_sync. Added-Init-node-for-Dn-Beacon-nodes. Period-set-automatically-from-Drone-trilateration-resolution.
+
+After-1200-seconds-Drone-clk-12-seconds-ahead-of-Beacon-clks. New-clk-sync-paradigm-DCS-B-always-running-syncs-Drone-Beacon-clks-to-own-internal-clk-once-every-sec.
 
 # Timeline
 May 2023 - Project begun.
@@ -106,8 +119,8 @@ Dn_status_map	    Status_map.msg	float32 sx  float32 sy  float32 sz	contraspect_
 		    			float32 b3x float32 b3y float32 b3z
 		    			float32 b4x float32 b4y float32 b4z
 SERVICE TYPES
-Bcn_init_pos	Bcn_pos.msg	float32 x, y, z, uint8 bid || uint8 bid	     contraspect_msgs
-Clk_sync     	Clk_sync.msg  	uint8 all_syncd || uint8 bid		     contraspect_msgs
+Bcn_init_pos	Bcn_pos.msg	float32 x y z uint8 bid || uint8 bid	     contraspect_msgs
+Clk_sync     	Clk_sync.msg  	uint8 all_syncd float32 x || uint8 bid	     contraspect_msgs
 Dn_ctrl	     	Dn_ctrl.sr	float64 x  float64 y  float64 z ||	     contraspect_msgs
 
 srv_Clk_sync:
