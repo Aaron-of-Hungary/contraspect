@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
   while (ros::ok()) {
     
     /* In-loop functions */
-    testDn_calc();  
+    ROS_INFO("%f",0.001/0.000146);
     
     /* Loop end */
     ros::spinOnce();

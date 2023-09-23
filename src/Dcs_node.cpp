@@ -10,7 +10,6 @@
 #include "contraspect/contraspect.h"
 #include "visualization_msgs/Marker.h"
 #include "visualization_msgs/MarkerArray.h"
-#include "contraspect_msgs/CLK.h" 
 #include "contraspect_msgs/Clk_sync.h" 
 #include "contraspect_msgs/Status_map.h" 
 #include "contraspect_msgs/Dn_ctrl.h" 
@@ -28,15 +27,15 @@ constexpr double EPSILON     = 0.001,
   MAX_Z_VALUE = 5.0;                           /* Max height Dn reach, Min 1.0 Max 30.0       */
 
 /* Global vars declare */
-double status_map[cspect::BEACONS_NUM+2][3],
-       CLK_value [cspect::BEACONS_NUM+1];
-bool   CLK_recvd [cspect::BEACONS_NUM+2]; /* CLK_recvd[cspect::BEACONS_NUM+1] == "all recvd" */
+double status_map[cspect::BEACONS_NUM+2][3];
 enum M {A,B,C}; /* A: recv Dn_status_map, B: send Clk_sync C: send Dn_ctrl */
 enum M mode;
+float  clk = 0.0;
 
 /* Callback declare */
 void callback_Dn_status_map(const contraspect_msgs::Status_map::ConstPtr &msg);
-void callback_CLK          (const contraspect_msgs::CLK       ::ConstPtr &msg);
+bool callback_Clk_sync	   (	  contraspect_msgs::Clk_sync  ::Request  &req,
+		       	   	  contraspect_msgs::Clk_sync  ::Response &res);
 
 /* Functions declare */
 unsigned argvParse(int &Argc, char **Argv, enum M &Mode);
@@ -62,9 +61,10 @@ int main(int argc, char **argv){
   std::string s = ss.str();
   ros::init(argc, argv, s.c_str());
   ros::NodeHandle n;
-  ros::Subscriber sub_Dn_status_map, sub_CLK;
+  ros::Subscriber sub_Dn_status_map;
   ros::Publisher pub_object_markers;
-  ros::ServiceClient cli_Clk_sync[cspect::BEACONS_NUM+1], cli_Dn_ctrl;
+  ros::ServiceClient cli_Dn_ctrl;
+  ros::ServiceServer ser_Clk_sync;
 
   /* Initialize MODE-specific pub-sub variables */
   if(mode==A){
@@ -73,13 +73,7 @@ int main(int argc, char **argv){
     pub_object_markers  = n.advertise<visualization_msgs::MarkerArray>(OM, 10);
   }
   else if(mode==B){
-    sub_CLK = n.subscribe("CLK", cspect::SUBRATE, callback_CLK);
-    for(size_t ii = 0; ii!=cspect::BEACONS_NUM+1; ii++){
-      ss.str("");
-      ss << "Clk_sync_" << (int)ii;
-      s = ss.str();
-      cli_Clk_sync[ii] = n.serviceClient<contraspect_msgs::Clk_sync>(s.c_str()); 
-    }
+    ser_Clk_sync = n.advertiseService("Clk_sync", callback_Clk_sync);
   }
   else if(mode==C) cli_Dn_ctrl  = n.serviceClient<contraspect_msgs::Dn_ctrl >("Dn_ctrl" );
   /*ROS_INFO("Initialize node and pub sub variables success");*/
@@ -91,13 +85,8 @@ int main(int argc, char **argv){
     syncwin = cspect::BEACONS_NUM+1;                /* Sync window for Clk_sync	       	      */
   double    move[3]  = {0.0,0.0,0.0},               /* move cmd for Dn_ctrl 		      */
     ctrl_prev[3] = {0.0,0.0,0.0},		    /* stored previous value of Dn_ctrl	      */
-    v[cspect::BEACONS_NUM+2][3],                    /* Dn_status_map recv data to visualize   */
-    CLK_diff[cspect::BEACONS_NUM+1],		    /* Deviation of CLK val from avg CLK val  */
-    CLK_syncd[cspect::BEACONS_NUM+2],		    /* Shows if all objects CLK synchronized  */
-    CLK_mean;				    	    /* Average value of recvd CLK messages    */
+    v[cspect::BEACONS_NUM+2][3];                    /* Dn_status_map recv data to visualize   */
   contraspect_msgs::Dn_ctrl srv_Dn_ctrl;
-  contraspect_msgs::Clk_sync srv_Clk_sync;
-    srv_Clk_sync.request.all_syncd = (uint8_t)0;    /* Bool showing if all Clk_sync completed */
   
   /*Loop begin */
   ros::Rate loopRate(pow(cspect::PERIOD, -1.0));
@@ -116,84 +105,13 @@ int main(int argc, char **argv){
       }
     }
 
-    /* Call Clk_sync srv req */
-    else if(mode == B){      
-      /* Step 1: send & receive all Clk_sync services (to sync clks)                   */
-      /* Step 2: send & receive all Clk_sync services again (to confirm sync complete) */
-      /* Step 3: read received CLK values and send finetune srv-s until precise sync   */
-      /* Send update service request to oldest updated object                          */
-      if(cli_Clk_sync[send_next].call(srv_Clk_sync)){
-	ROS_INFO("srv_Clk_sync call,dates:%lu,%lu,%lu,%lu,%lu\n\t\t\t\toldest_syncd_index:%lu",
-		 cSyncd_date[0],cSyncd_date[1],cSyncd_date[2],cSyncd_date[3],cSyncd_date[4],
-		 send_next);
-	/* Set new date for current index */
-	cSyncd_date[send_next] = cntr;
-	/* Find & set new oldest send index */
-	if(srv_Clk_sync.request.all_syncd<2)
-	  for(size_t ii = 0; ii!=cspect::BEACONS_NUM+1; ii++)
-	    if(cSyncd_date[ii]<cSyncd_date[send_next]) send_next=ii;
-        /* Check sync progress status */
-	switch(srv_Clk_sync.request.all_syncd){
-	/* Step 1: Sending initial sync srv to all objects */
-	case (uint8_t)0:
-	  /* All responses recvd within a short period -> go to next step */
-	  if(cSyncd_date[send_next]>0 && cntr-cSyncd_date[send_next]<=syncwin){
-	    srv_Clk_sync.request.all_syncd = (uint8_t)1;
-	    for(size_t ii = 0; ii!=cspect::BEACONS_NUM+1; ii++) cSyncd_date[ii] = 0;
-	    ROS_INFO("srv_Clk_sync Step 1 (Initial CLK sync) complete.");
-	  } else ROS_INFO("srv_Clk_sync Step 1 (Initial CLK sync) underway.");
-	  break;
-	/* Step 2: Sending confirm srv to all objects */
-	case (uint8_t)1:
-	  /* All responses recvd -> go to next step */
-	  if(cSyncd_date[send_next]>0){
-	    srv_Clk_sync.request.all_syncd = (uint8_t)2;
-	    ROS_INFO("srv_Clk_sync Step 2 (Initial sync confirm) complete.");
-	  } else ROS_INFO("srv_Clk_sync Step 2 (Initial sync confirm) underway.");
-	  break;
-	/* Step 3: Sending finetuning Clk_sync srvs */
-	case (uint8_t)2:
-	  if(CLK_recvd[cspect::BEACONS_NUM+1]){
-	    size_t lv = 0;
-	    /* Check if CLKs finetuned enough */
-	    for(;lv!=cspect::BEACONS_NUM+1;lv++)
-	      if(CLK_diff[lv]>0.5*cspect::MAXDELAY){lv = 0; break;}
-	    /* All finetuned -> Node shutdown */
-	    if(lv!=0){	      
-	      ROS_INFO("srv_Clk_sync Step 3 (finetuning) complete - Node shutdown.\nCLK_mean=%f",
-		       CLK_mean);
-	      for(size_t ii=0; ii!=cspect::BEACONS_NUM+1;ii++)
-		ROS_INFO("CLK[%lu],diff[%lu]=%f,%f",ii,ii,CLK_value[ii],CLK_diff[ii]);
-	      return 0;
-	    }
-	    CLK_syncd[send_next] = true;
-	    /* Cycling through objects via send_next variable */
-	    if(send_next<1) send_next = cspect::BEACONS_NUM;
-	    else send_next = send_next - 1;
-	    CLK_mean = 0;
-	    CLK_syncd[cspect::BEACONS_NUM+1] = true;
-	    for(size_t ii=0; ii!=cspect::BEACONS_NUM+1; ii++){
-	      /* Find avg value of CLKs */
-	      CLK_mean = CLK_mean + 1.0/(cspect::BEACONS_NUM+1.0)*CLK_value[ii];
-	      /* Check if all CLK-synchronized */
-	      if(!CLK_syncd[ii]) CLK_syncd[cspect::BEACONS_NUM+1] = false;
-	    }	      
-	    /* Setting up adjust value for next sent CLK-sync message */
-	    srv_Clk_sync.request.x = CLK_diff[send_next] = CLK_mean-CLK_value[send_next];
-	    /* If all CLK synced - wait for new CLK values */
-	    if(CLK_syncd[cspect::BEACONS_NUM+1])
-	      for(size_t ii=0; ii!=cspect::BEACONS_NUM+2; ii++) CLK_recvd[ii] = false;
-	  } else srv_Clk_sync.request.x = 0.0;
-	  break;
-	default:
-	  ROS_ERROR("Error: srv_Clk_sync.request.all_syncd == %d",
-		    (int)srv_Clk_sync.request.all_syncd);
-	  break;
-	}
-      } else ROS_ERROR("srv_Clk_sync call fail.");
+    /* Set internal clock to sync Drone and Beacons */
+    else if(mode == B){
+      if(clk>2048.0-cspect::PERIOD) clk = clk-2048.0+cspect::PERIOD;
+      else clk = clk + cspect::PERIOD;      
     }  
     
-    /* Publish to Dn_ctrl topic */
+    /* Call Dn_ctrl service */
     else if(mode == C){
       /* read 3 input chars to get complete direction */
       for(size_t ii = 0; ii!=3; ii++) cspect::readFromKeyboard(move);
@@ -241,29 +159,12 @@ void callback_Dn_status_map(const contraspect_msgs::Status_map::ConstPtr &msg){
     ROS_INFO("callback_Dn_status_map");
   }
 }
-void callback_CLK(const contraspect_msgs::CLK::ConstPtr &msg){
-  if(msg){    
-    /* Check if received data irregular */
-    if(msg->bid<0||msg->bid>4){ /* bid irregular */
-      ROS_ERROR("Received CLK message thrown, irregular BID %d",(int)msg->bid);
-      return;
-    }
-    if(!CLK_recvd[msg->bid]){
-      /* Mark CLK received */
-      CLK_recvd[msg->bid]=true;
-      /* Check if all CLK msgs received */
-      CLK_recvd[cspect::BEACONS_NUM+1] = true;
-      for(size_t ii = 0; ii!=cspect::BEACONS_NUM+1; ii++)
-	if(!CLK_recvd[ii]) CLK_recvd[cspect::BEACONS_NUM+1] = false;
-    /* Only use CLK if all arrive consecutively */
-    }else if(!CLK_recvd[cspect::BEACONS_NUM+1]){
-      /* Set CLK value according recvd */
-      CLK_value[msg->bid]=msg->clk;      
-      /* Set all to false except this one, wait for new CLKs */
-      for(size_t ii=0; ii!=cspect::BEACONS_NUM+1; ii++)
-	if(ii!=msg->bid) CLK_recvd[ii] = false;
-    }
-  }
+
+bool callback_Clk_sync(contraspect_msgs::Clk_sync::Request  &req,
+		       contraspect_msgs::Clk_sync::Response &res){
+  res.adjust = clk-req.clk;
+  ROS_INFO("callback_Clk_sync");
+  return true;
 }
 
 unsigned argvParse(int &Argc, char **Argv, enum M &Mode){

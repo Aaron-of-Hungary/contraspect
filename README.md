@@ -6,15 +6,22 @@ Department of Telecommunications and Media Informatics
 Author: Áron Hajdu-Moharos
 Consultant: Dr. Gábor Fehér
 
-BEFORE USING EXECUTE:
+# EXECUTE BEFORE USE:
 roscd contraspect
 mv ./contraspect* ..
 
+# FINETUNING:
+Adjust values in <contraspect/include/contraspect/contraspect.h>
+
+/* Jegyzokonyvbe */
 BASE DELAYS
 Max allowed base delay in sec: 0.5*res/speedofsound
 res being the desired trilateration resolution in m
 0.5 because we send it twice: once to Loc_sim, then again to Drone
 Our desired resolution: 0.1 m -> Max allowed base delay: 0.5*0.1/343 = 0.000146 s
+Dn-clk 1ms/s ahead of beacons
+Current CLK shift 1ms/s -> from this min CLK-sync freq to attain max delay: 0.001/0.000146s = 6.85Hz
+Reduce CLK shift to lower min CLK-sync freq to 10-100Hz - no need, even 10Hz already low enough.
 
 What works:
 Dcs_A, Dcs_B, Dcs_C, Bcn_init_pos, Triang, Triang_demo, Loc_sim_calc, Loc_sim-Triang-fwd, Dn_status_map, Dn_calc
@@ -23,10 +30,9 @@ What doesn't work:
 Triang added delay
 Beacon and Drone CLKs sync together
 
+Find mean, min, max base delay in Dn_node.
 Run catkin_ws, correct runtime errors, git commit.
-Current base delay: min 0.001, max 0.014
-To reduce base delay: better clk_sync -> more sophisticated Dcs-b.
-Fix: Dn-clk slower than Beacons-clk
+Current base delay: 
 Check accuracy of Loc_sim added delays
 At 10Hz, Compare Loc_sim added Triang delay and Dn measured Triang delay
 dronePosCalc: compare map, w arrays size to N. no more, no less.
@@ -42,9 +48,7 @@ Create overview diagram with full explanation of function
 Instructions: at least 3 NON-COPLANAR (and non-colinear) homing beacons
 Edit in graph: Loc_sim no sub Bcn_init_pos
 
-Uniformized-loop-period-for-all-nodes-to-fix-clk-discrepancy. Added-dronePosCalc-beacons-weights. Added-DCS-B-finetuned-CLK_sync. Added-Init-node-for-Dn-Beacon-nodes. Period-set-automatically-from-Drone-trilateration-resolution.
-
-After-1200-seconds-Drone-clk-12-seconds-ahead-of-Beacon-clks. New-clk-sync-paradigm-DCS-B-always-running-syncs-Drone-Beacon-clks-to-own-internal-clk-once-every-sec.
+git commit -m "contraspect-19th-commit. Tested-and-working. Drone-clk-1ms-per-sec-ahead-of-Beacon-clks-clk-discrepancy-fix. New-clk-sync-paradigm-DCS-B-always-running-as-server-syncs-Drone-Beacon-clks-to-own-internal-clock-at-CLK_SYNC_PERIOD. contraspect.h-and-Init-cosmetics."
 
 # Timeline
 May 2023 - Project begun.
@@ -119,9 +123,9 @@ Dn_status_map	    Status_map.msg	float32 sx  float32 sy  float32 sz	contraspect_
 		    			float32 b3x float32 b3y float32 b3z
 		    			float32 b4x float32 b4y float32 b4z
 SERVICE TYPES
-Bcn_init_pos	Bcn_pos.msg	float32 x y z uint8 bid || uint8 bid	     contraspect_msgs
-Clk_sync     	Clk_sync.msg  	uint8 all_syncd float32 x || uint8 bid	     contraspect_msgs
-Dn_ctrl	     	Dn_ctrl.sr	float64 x  float64 y  float64 z ||	     contraspect_msgs
+Bcn_init_pos	Bcn_pos.srv	float32 x y z uint8 bid || uint8 bid	     contraspect_msgs
+Clk_sync     	Clk_sync.srv  	float64 clk || float32 adjust	     	     contraspect_msgs
+Dn_ctrl	     	Dn_ctrl.srv	float64 x  float64 y  float64 z ||	     contraspect_msgs
 
 srv_Clk_sync:
  request: uint8 all_syncd		client-DCS-B		

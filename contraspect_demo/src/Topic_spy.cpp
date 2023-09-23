@@ -222,8 +222,8 @@ bool callback_Clk_sync(contraspect_msgs::Clk_sync::Request  &req,
 		       contraspect_msgs::Clk_sync::Response &res){
   std::stringstream ss;
   ss << "I apprehended Clk_sync service request:"
-     << "\nrequest.all_syncd = "
-     << req.all_syncd;
+     << "\nrequest.clk = "
+     << std::to_string(req.clk);
   std::string s = ss.str();
   ROS_INFO("%s",s.c_str());
   return true;

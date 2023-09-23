@@ -30,13 +30,10 @@ float clk = 0.0;
 double beacons_delay[cspect::BEACONS_NUM] = {0.0,0.0,0.0,0.0},
        beacons_dist [cspect::BEACONS_NUM] = {0.0,0.0,0.0,0.0};
 /* [0] true only if all others true. default false */
-bool triang_recvd[cspect::BEACONS_NUM+1] =  {false,false,false,false,false},
-  clk_syncd = false;
+bool triang_recvd[cspect::BEACONS_NUM+1] =  {false,false,false,false,false};
 size_t cntr = 0;
 
 void callback_Triang(const contraspect_msgs::Triang::ConstPtr& msg); 
-bool callback_Clk_sync(    contraspect_msgs::Clk_sync::Request  &req,
-		           contraspect_msgs::Clk_sync::Response &res); 
 bool callback_Bcn_init_pos(contraspect_msgs::Bcn_pos ::Request  &req,
 			   contraspect_msgs::Bcn_pos ::Response &res); 
 bool callback_Dn_ctrl(     contraspect_msgs::Dn_ctrl ::Request  &req,
@@ -78,16 +75,19 @@ int main(int argc, char **argv){
   ros::Subscriber sub_Triang;
    sub_Triang = n.subscribe(s.c_str(),	 cspect::SUBRATE, callback_Triang);
   ros::Publisher pub_Dn_status_map, pub_CLK, pub_Dn_calc;
-   pub_Dn_status_map = n.advertise<contraspect_msgs::Status_map>(DSM,       cspect::PUBRATE);
+   pub_Dn_status_map = n.advertise<contraspect_msgs::Status_map>(DSM,      cspect::PUBRATE);
    pub_CLK	    = n.advertise<contraspect_msgs::CLK       >("CLK",     cspect::PUBRATE);
    pub_Dn_calc	    = n.advertise<        std_msgs::String    >("Dn_calc", cspect::PUBRATE);
-  ros::ServiceServer ser_Clk_sync, ser_Dn_ctrl, ser_Bcn_init_pos;
-   ser_Clk_sync          = n.advertiseService("Clk_sync_0"  , callback_Clk_sync    );
+  ros::ServiceServer ser_Dn_ctrl, ser_Bcn_init_pos;
    ser_Bcn_init_pos      = n.advertiseService("Bcn_init_pos", callback_Bcn_init_pos);
    if(!demo) ser_Dn_ctrl = n.advertiseService("Dn_ctrl"     , callback_Dn_ctrl     );
+  ros::ServiceClient cli_Clk_sync;
+   cli_Clk_sync = n.serviceClient<contraspect_msgs::Clk_sync>("Clk_sync");
 
   /* Initialize other variables */
   bool first_dronePosCalc = true;
+  contraspect_msgs::Clk_sync srv_Clk_sync;
+  char c;
 
   /* Loop begin */
   ros::Rate loopRate(pow(cspect::PERIOD, -1.0));
@@ -101,7 +101,18 @@ int main(int argc, char **argv){
       pub_CLK.publish(msg_CLK);
       /*ROS_INFO("Published to CLK topic");*/
     }
-
+    
+    /* Call CLK_sync srv req */
+    if(!(cntr%(unsigned)(1.0/cspect::PERIOD/cspect::CLK_SYNC_FREQ+1.0))){
+      srv_Clk_sync.request.clk = clk;
+      if(cli_Clk_sync.call(srv_Clk_sync)){
+	clk = clk + srv_Clk_sync.response.adjust;
+	srv_Clk_sync.response.adjust<0.0 ? c='-' :  c='+';
+	ROS_INFO("Dn Clk_sync adjust %c%f",c,srv_Clk_sync.response.adjust);
+      }
+      else ROS_ERROR("Dn Clk_sync adjust fail");
+    }
+    
     /* Publish to Dn_status_map topic - publish speed: 10Hz */
     if(!(cntr%(cspect::P_10ms*10))){
       contraspect_msgs::Status_map msg_Dn_status_map = setmsgDnStatusMap(status, map);
@@ -124,12 +135,13 @@ int main(int argc, char **argv){
 	ROS_ERROR("dronePosCalc ERROR");      
     }
 
+    /* Shift clk */
+    if(clk>2048.0-cspect::PERIOD) clk = clk-2048.0+cspect::PERIOD;
+    else clk = clk + cspect::PERIOD;
     /* Loop end */
+    cntr = cntr + 1;
     ros::spinOnce();
     loopRate.sleep();
-    cntr = cntr + 1;
-    if(clk>2047.01) clk = clk-2047.01;
-    clk = clk + cspect::PERIOD;
   }
   return 0;
 }
@@ -179,28 +191,6 @@ bool callback_Dn_ctrl(contraspect_msgs::Dn_ctrl::Request  &req,
   status[1] = status[1] + req.y;
   status[2] = status[2] + req.z;
   ROS_INFO("callback_Dn_ctrl");
-  return true;
-}
-bool callback_Clk_sync(contraspect_msgs::Clk_sync::Request  &req,
-		       contraspect_msgs::Clk_sync::Response &res){
-  switch(req.all_syncd){
-  case (uint8_t)0:
-    clk = 0.0;
-    cntr = 0;
-    ROS_INFO("callback_Clk_sync 0");
-    break;
-  case (uint8_t)1:
-    clk_syncd = true;
-    ROS_INFO("callback_Clk_sync 1");
-    break;
-  case (uint8_t)2:
-    clk = clk + req.x;
-    ROS_INFO("callback_Clk_sync 2");
-    break;
-  default:
-    ROS_WARN("callback_Clk_sync n/a");
-    break;
-  }
   return true;
 }
 

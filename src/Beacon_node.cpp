@@ -19,11 +19,8 @@ constexpr char   FILENAME[] = "/home/george/catkin_ws/src/contraspect/txt/Beacon
 float clk = 0.0;
 double pos[3] = {0.0,0.0,0.0};
 uint8_t bid = 0;
-bool clk_syncd = false;
 unsigned cntr = 0;
 
-bool callback_Clk_sync(contraspect_msgs::Clk_sync::Request  &req,
-		       contraspect_msgs::Clk_sync::Response &res);
 unsigned argvParse(int Argc, char **Argv, double *Pos, uint8_t &Bid);
 
 int main(int argc, char **argv){
@@ -47,38 +44,48 @@ int main(int argc, char **argv){
   ros::Publisher pub_Triang =n.advertise<contraspect_msgs::Triang>("Triang",cspect::PUBRATE);
   ros::Publisher pub_CLK    =n.advertise<contraspect_msgs::CLK   >("CLK"   ,cspect::PUBRATE);
   ros::ServiceClient cli_Bcn_init_pos=n.serviceClient<contraspect_msgs::Bcn_pos>("Bcn_init_pos");
-  ros::ServiceServer ser_Clk_sync;
-   ss.str("");
-   ss << "Clk_sync_" << (unsigned)bid;
-   s = ss.str();
-   ser_Clk_sync = n.advertiseService(s.c_str(), callback_Clk_sync);
+  ros::ServiceClient cli_Clk_sync    =n.serviceClient<contraspect_msgs::Clk_sync>(   "Clk_sync");
   /*ROS_INFO("Initialize node and pub sub variables success");*/
 
   /* Initialize additional variables */
   contraspect_msgs::Triang msg_Triang;
   contraspect_msgs::CLK msg_CLK;
+  contraspect_msgs::Clk_sync srv_Clk_sync;
   contraspect_msgs::Bcn_pos srv_Bcn_init_pos;
   srv_Bcn_init_pos.request.x   = pos[0];
   srv_Bcn_init_pos.request.y   = pos[1];
   srv_Bcn_init_pos.request.z   = pos[2];
   srv_Bcn_init_pos.request.bid = bid;
   srv_Bcn_init_pos.response.bid = (uint8_t)(cspect::BEACONS_NUM*2);
-  bool init_pos_done = false;
+  bool init_pos_done = false, clk_syncd = false;
+  char c;
   
   /*Loop begin */
   ros::Rate loopRate(pow(cspect::PERIOD, -1.0));
-  while(ros::ok()){
+  while(ros::ok()){    
 
-    /* Publish to Triang topic */
-    /* publish for 1ms, then pause for 9ms */
+    /* Call CLK_sync srv req */
+    if(!(cntr%(unsigned)(1.0/cspect::PERIOD/cspect::CLK_SYNC_FREQ+1.0))){
+      srv_Clk_sync.request.clk = clk;
+      if(cli_Clk_sync.call(srv_Clk_sync)){
+	if(!clk_syncd) clk_syncd = true;
+	clk = clk + srv_Clk_sync.response.adjust;
+	srv_Clk_sync.response.adjust<0.0 ? c='-' : c='+';
+	ROS_INFO("B%d Clk_sync adjust %c%f",(int)bid,c,srv_Clk_sync.response.adjust);
+      }
+      else ROS_ERROR("B%d Clk_sync adjust fail",(int)bid);
+    }
+
+    /* publish continuously for 1ms, then pause for 9ms */
     if(cspect::lastdigit_msec(clk) == 0){
+      /* Publish to Triang topic */
       if(clk_syncd && !(cntr%cspect::BEACONS_NUM)){
 	msg_Triang.timestamp = clk;
 	msg_Triang.bid = bid;
 	pub_Triang.publish(msg_Triang);
 	ROS_INFO("pub Triang tmstp,bid=%f,%d",msg_Triang.timestamp,msg_Triang.bid);
       }
-
+      
       /* Publish to CLK topic */
       if(!(cntr%(cspect::BEACONS_NUM+1))){
 	msg_CLK.clk = clk;
@@ -102,40 +109,18 @@ int main(int argc, char **argv){
       }else ROS_ERROR("FAILED call srv_Bcn_init_pos %d: x,y,z,rqbid,rpbid = %f,%f,%f,%d,%d",
 		       cntr, pos[0], pos[1], pos[2],
 		       srv_Bcn_init_pos.request.bid,srv_Bcn_init_pos.response.bid);
-    cntr = cntr + 1;
 
+    /* Shift clk */
+    if(clk>2048.0-cspect::PERIOD) clk = clk-2048.0+cspect::PERIOD;
+    else clk = clk + cspect::PERIOD;
     /* Loop end */
-    clk = clk + cspect::PERIOD;
-    if(clk>2047.01) clk = clk-2047.01;
+    cntr = cntr + 1;
     ros::spinOnce();
     loopRate.sleep();
   }
 
   /* End of code */
   return 0;
-}
-
-bool callback_Clk_sync(contraspect_msgs::Clk_sync::Request  &req,
-		       contraspect_msgs::Clk_sync::Response &res){
-  switch(req.all_syncd){
-  case (uint8_t)0:
-    clk = 0.0;
-    cntr = 0;
-    ROS_INFO("callback_Clk_sync 0");
-    break;
-  case (uint8_t)1:
-    clk_syncd = true;
-    ROS_INFO("callback_Clk_sync 1");
-    break;
-  case (uint8_t)2:
-    clk = clk + req.x;
-    ROS_INFO("callback_Clk_sync 2");
-    break;
-  default:
-    ROS_WARN("callback_Clk_sync n/a");
-    break;
-  }
-  return true;
 }
 
 unsigned argvParse(int Argc, char **Argv, double *Pos, uint8_t &Bid){
