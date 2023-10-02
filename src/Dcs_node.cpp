@@ -19,27 +19,29 @@
 
 /* Constants declare */
 constexpr char FILENAME[] = "/home/george/catkin_ws/src/contraspect/txt/Dcs_node_info.txt",
-      	       DSM[]      = "Dn_status_map",
   	       OM[]	  = "object_markers",
  	       BASHCMD[]  = "gnome-terminal --tab -- bash -c \"rosrun rviz rviz; exec bash\"";
 constexpr double EPSILON     = 0.001,
   MARKERSCALE = 0.1,                           /* Dn step scale, def 0.1                      */
-  MAX_Z_VALUE = 5.0;                           /* Max height Dn reach, Min 1.0 Max 30.0       */
+  MAX_Z_VALUE = 5.0,                           /* Max height Dn reach, Min 1.0 Max 30.0       */
+  PERIOD = cspect::PERIOD;		       /* Do not meddle with this */
+constexpr unsigned PERIOD_DCS_A = cspect::P_10ms*10; /* Dn_status_map, object_markers, 10Hz: */
 
 /* Global vars declare */
-double status_map[cspect::BEACONS_NUM+2][3];
-enum M {A,B,C}; /* A: recv Dn_status_map, B: send Clk_sync C: send Dn_ctrl */
+double adjust_mean = .0, adjust_variance = .0;
+unsigned adjust_count = 0;
+enum M {A,B,C}; /* A: cli Dn_status_map, B: ser Clk_sync C: cli Dn_ctrl */
 enum M mode;
 float  clk = 0.0;
 
 /* Callback declare */
-void callback_Dn_status_map(const contraspect_msgs::Status_map::ConstPtr &msg);
 bool callback_Clk_sync	   (	  contraspect_msgs::Clk_sync  ::Request  &req,
 		       	   	  contraspect_msgs::Clk_sync  ::Response &res);
 
 /* Functions declare */
 unsigned argvParse(int &Argc, char **Argv, enum M &Mode);
 char modeChar(enum M &Mode);
+void setvals_Dn_status_map(contraspect_msgs::Status_map &SM, double Status_map[][3]);
 void open3DMap();
 void sendTo3DMap(double V[][3], ros::Publisher &Pub_Ojbect_Markers, const unsigned &ArrSize);
 
@@ -61,21 +63,22 @@ int main(int argc, char **argv){
   std::string s = ss.str();
   ros::init(argc, argv, s.c_str());
   ros::NodeHandle n;
-  ros::Subscriber sub_Dn_status_map;
   ros::Publisher pub_object_markers;
-  ros::ServiceClient cli_Dn_ctrl;
+  ros::ServiceClient cli_Dn_ctrl, cli_Dn_status_map;
   ros::ServiceServer ser_Clk_sync;
 
   /* Initialize MODE-specific pub-sub variables */
   if(mode==A){
-    /*open3DMap();*/ /* Open rviz in new terminal tab */
-    sub_Dn_status_map = n.subscribe(DSM, cspect::SUBRATE, callback_Dn_status_map);
+    /* Open rviz in new terminal tab */
+    cli_Dn_status_map = n.serviceClient<contraspect_msgs::Status_map>("Dn_status_map");
     pub_object_markers  = n.advertise<visualization_msgs::MarkerArray>(OM, 10);
   }
   else if(mode==B){
     ser_Clk_sync = n.advertiseService("Clk_sync", callback_Clk_sync);
   }
-  else if(mode==C) cli_Dn_ctrl  = n.serviceClient<contraspect_msgs::Dn_ctrl >("Dn_ctrl" );
+  else if(mode==C) {
+    cli_Dn_ctrl  = n.serviceClient<contraspect_msgs::Dn_ctrl >("Dn_ctrl" );
+  }
   /*ROS_INFO("Initialize node and pub sub variables success");*/
 
   /* Initialize additional variables */
@@ -85,16 +88,20 @@ int main(int argc, char **argv){
     syncwin = cspect::BEACONS_NUM+1;                /* Sync window for Clk_sync	       	      */
   double    move[3]  = {0.0,0.0,0.0},               /* move cmd for Dn_ctrl 		      */
     ctrl_prev[3] = {0.0,0.0,0.0},		    /* stored previous value of Dn_ctrl	      */
+    status_map[cspect::BEACONS_NUM+2][3],	    /* Dn_status_map received data	      */
     v[cspect::BEACONS_NUM+2][3];                    /* Dn_status_map recv data to visualize   */
   contraspect_msgs::Dn_ctrl srv_Dn_ctrl;
+  contraspect_msgs::Status_map srv_Dn_status_map;
   
   /*Loop begin */
-  ros::Rate loopRate(pow(cspect::PERIOD, -1.0));
+  ros::Rate loopRate(pow(PERIOD, -1.0));
   while(ros::ok()){
 
-    /* Publish Dn & Bcns visualize data to object_markers for Rviz - Publish speed: 100Hz */
+    /* Call service to receive Dn & Bcns position data and publish to object_markers for Rviz. */
+    /* Publish speed: 10Hz */
     if(mode == A){
-      if(!(cntr%cspect::P_10ms)){
+      if(!(cntr%PERIOD_DCS_A) && cli_Dn_status_map.call(srv_Dn_status_map)){
+	setvals_Dn_status_map(srv_Dn_status_map, status_map);
 	for(size_t ii = 0; ii!=3; ii++)
 	  v[0][ii] = status_map[0][ii] + status_map[1][ii]; /* Dn pos + status = Dn future pos */
 	for(size_t ii = 1; ii!=cspect::BEACONS_NUM+2; ii++)
@@ -102,13 +109,18 @@ int main(int argc, char **argv){
 	    v[ii][jj] = status_map[ii][jj];
 	sendTo3DMap(v, pub_object_markers, cspect::BEACONS_NUM+2);
 	/*ROS_INFO("Pub to object_markers");*/
-      }
+      }else if(cntr%PERIOD_DCS_A);
+      else ROS_ERROR("cli_Dn_status_map.call() fail.");
     }
 
     /* Set internal clock to sync Drone and Beacons */
     else if(mode == B){
-      if(clk>2048.0-cspect::PERIOD) clk = clk-2048.0+cspect::PERIOD;
-      else clk = clk + cspect::PERIOD;      
+      /* Cycle DCS internal clk */
+      if(clk>2048.0-PERIOD) clk = clk-2048.0+PERIOD; else clk = clk + PERIOD;
+      /* Display avg adjust value */
+      if(!(cntr%(cspect::P_10ms*10)))
+	ROS_INFO("adjust_mean,adjust_stdev,adjust_count=%f,%f,%u",
+		 adjust_mean,sqrt(adjust_variance),adjust_count);
     }  
     
     /* Call Dn_ctrl service */
@@ -147,23 +159,42 @@ int main(int argc, char **argv){
   return 0;
 }
 
-void callback_Dn_status_map(const contraspect_msgs::Status_map::ConstPtr &msg){
-  if(msg){
+void setvals_Dn_status_map(contraspect_msgs::Status_map &SM, double Status_map[][3]){
     /* We assume beaconsNum == 4 */
-    status_map[0][0] = msg-> sx; status_map[0][1] = msg-> sy; status_map[0][2] = msg-> sz;
-    status_map[1][0] = msg-> dx; status_map[1][1] = msg-> dy; status_map[1][2] = msg-> dz;
-    status_map[2][0] = msg->b1x; status_map[2][1] = msg->b1y; status_map[2][2] = msg->b1z;
-    status_map[3][0] = msg->b2x; status_map[3][1] = msg->b2y; status_map[3][2] = msg->b2z;
-    status_map[4][0] = msg->b3x; status_map[4][1] = msg->b3y; status_map[4][2] = msg->b3z;
-    status_map[5][0] = msg->b4x; status_map[5][1] = msg->b4y; status_map[5][2] = msg->b4z;
-    ROS_INFO("callback_Dn_status_map");
-  }
+    Status_map[0][0] = SM.response.sx;
+    Status_map[0][1] = SM.response.sy;
+    Status_map[0][2] = SM.response.sz;
+
+    Status_map[1][0] = SM.response.dx;
+    Status_map[1][1] = SM.response.dy;
+    Status_map[1][2] = SM.response.dz;
+
+    Status_map[2][0] = SM.response.b1x;
+    Status_map[2][1] = SM.response.b1y;
+    Status_map[2][2] = SM.response.b1z;
+
+    Status_map[3][0] = SM.response.b2x;
+    Status_map[3][1] = SM.response.b2y;
+    Status_map[3][2] = SM.response.b2z;
+
+    Status_map[4][0] = SM.response.b3x;
+    Status_map[4][1] = SM.response.b3y;
+    Status_map[4][2] = SM.response.b3z;
+
+    Status_map[5][0] = SM.response.b4x;
+    Status_map[5][1] = SM.response.b4y;
+    Status_map[5][2] = SM.response.b4z;
 }
 
 bool callback_Clk_sync(contraspect_msgs::Clk_sync::Request  &req,
 		       contraspect_msgs::Clk_sync::Response &res){
+  adjust_count = adjust_count + 1;
   res.adjust = clk-req.clk;
-  ROS_INFO("callback_Clk_sync");
+  adjust_mean = (adjust_mean*(double)(adjust_count-1)+res.adjust)/(double)adjust_count;
+  if(adjust_count>1)
+    adjust_variance = (adjust_variance*(double)(adjust_count-2)+pow(res.adjust-adjust_mean,2.0))/
+      (double)(adjust_count-1);
+  /*ROS_INFO("callback_Clk_sync. n=%u, a=%f, m=(mp*(n-1)+a)/n=%f, s^2=(sp^2*(n-2)+(a-m)^2)/n-1=%f, s^2*(n-1)=%f, (a-m)^2=%f",adjust_count,res.adjust,adjust_mean,adjust_variance,adjust_variance*(double)(adjust_count-1),pow(res.adjust-adjust_mean,2.0));*/
   return true;
 }
 

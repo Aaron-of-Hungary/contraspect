@@ -15,6 +15,7 @@
 #include <sstream>
 
 constexpr char   FILENAME[] = "/home/george/catkin_ws/src/contraspect/txt/Beacon_node_info.txt";
+constexpr double PERIOD = cspect::PERIOD; /* Do not meddle with this */
 
 float clk = 0.0;
 double pos[3] = {0.0,0.0,0.0};
@@ -42,7 +43,7 @@ int main(int argc, char **argv){
   ros::init(argc, argv, s.c_str());
   ros::NodeHandle n;
   ros::Publisher pub_Triang =n.advertise<contraspect_msgs::Triang>("Triang",cspect::PUBRATE);
-  ros::Publisher pub_CLK    =n.advertise<contraspect_msgs::CLK   >("CLK"   ,cspect::PUBRATE);
+  //  ros::Publisher pub_CLK    =n.advertise<contraspect_msgs::CLK   >("CLK"   ,cspect::PUBRATE);
   ros::ServiceClient cli_Bcn_init_pos=n.serviceClient<contraspect_msgs::Bcn_pos>("Bcn_init_pos");
   ros::ServiceClient cli_Clk_sync    =n.serviceClient<contraspect_msgs::Clk_sync>(   "Clk_sync");
   /*ROS_INFO("Initialize node and pub sub variables success");*/
@@ -61,17 +62,17 @@ int main(int argc, char **argv){
   char c;
   
   /*Loop begin */
-  ros::Rate loopRate(pow(cspect::PERIOD, -1.0));
-  while(ros::ok()){    
+  ros::Rate loopRate(pow(PERIOD, -1.0));
+  while(ros::ok()){
 
     /* Call CLK_sync srv req */
-    if(!(cntr%(unsigned)(1.0/cspect::PERIOD/cspect::CLK_SYNC_FREQ+1.0))){
+    if(!(cntr%(unsigned)(1.0/PERIOD/cspect::CLK_SYNC_FREQ+1.0))){
       srv_Clk_sync.request.clk = clk;
       if(cli_Clk_sync.call(srv_Clk_sync)){
 	if(!clk_syncd) clk_syncd = true;
 	clk = clk + srv_Clk_sync.response.adjust;
 	srv_Clk_sync.response.adjust<0.0 ? c='-' : c='+';
-	ROS_INFO("B%d Clk_sync adjust %c%f",(int)bid,c,srv_Clk_sync.response.adjust);
+	/*ROS_INFO("B%d Clk_sync adjust %c%f",(int)bid,c,srv_Clk_sync.response.adjust);*/
       }
       else ROS_ERROR("B%d Clk_sync adjust fail",(int)bid);
     }
@@ -85,14 +86,15 @@ int main(int argc, char **argv){
 	pub_Triang.publish(msg_Triang);
 	ROS_INFO("pub Triang tmstp,bid=%f,%d",msg_Triang.timestamp,msg_Triang.bid);
       }
-      
-      /* Publish to CLK topic */
-      if(!(cntr%(cspect::BEACONS_NUM+1))){
-	msg_CLK.clk = clk;
-	msg_CLK.bid = bid;
-	pub_CLK.publish(msg_CLK);
-	/*ROS_INFO("CLK pub: {clk,bid}={%f,%d}",msg_CLK.clk,msg_CLK.bid);*/
-      }
+
+      // Temporarily not publishing due to potential strain on roscore due to high freq
+      //      /* Publish to CLK topic */
+      //      if(!(cntr%(cspect::BEACONS_NUM+1))){
+      //	msg_CLK.clk = clk;
+      //	msg_CLK.bid = bid;
+      //	pub_CLK.publish(msg_CLK);
+      //	/*ROS_INFO("CLK pub: {clk,bid}={%f,%d}",msg_CLK.clk,msg_CLK.bid);*/
+      //      }
     }
 
     /* Call Bcn_init_pos service */
@@ -111,8 +113,7 @@ int main(int argc, char **argv){
 		       srv_Bcn_init_pos.request.bid,srv_Bcn_init_pos.response.bid);
 
     /* Shift clk */
-    if(clk>2048.0-cspect::PERIOD) clk = clk-2048.0+cspect::PERIOD;
-    else clk = clk + cspect::PERIOD;
+    if(clk>2048.0-PERIOD) clk = clk-2048.0+PERIOD; else clk = clk + PERIOD;
     /* Loop end */
     cntr = cntr + 1;
     ros::spinOnce();

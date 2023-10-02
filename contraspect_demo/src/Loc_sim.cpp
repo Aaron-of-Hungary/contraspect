@@ -16,10 +16,13 @@
 #include <sstream>
 #include <cmath>
 
-constexpr char FILENAME[] = "/home/george/catkin_ws/src/contraspect_demo/txt/Loc_sim_info.txt",
-      	       DNS[] 	  = "Dn_status_map";
+constexpr char FILENAME[] = "/home/george/catkin_ws/src/contraspect_demo/txt/Loc_sim_info.txt";
 constexpr double EPSILON    = 0.2     ,  /* Drone displace to trigger pos recalc. NONZERO! */
-  	  	 SMALLVALUE = 0.000001;
+  SMALLVALUE = 0.000001,
+  PERIOD = cspect::PERIOD;
+constexpr unsigned PERIOD_STATUS_MAP_CALL = cspect::P_10ms, /* Period cli_Dn_status_map, 100Hz */
+  PERIOD_DN_POS_ADJUST = cspect::P_10ms, /* Period adjust dn pos from Dn_ctrl, 100Hz */
+  PERIOD_CALC_DELAYS = cspect::P_10ms*100; /* Period calc triang msg delays, 1Hz */
 
 double map[cspect::BEACONS_NUM+1][3] =
   {{0.0,0.0,0.0},{0.0,0.0,0.0},{0.0,0.0,0.0},{0.0,0.0,0.0},{0.0,0.0,0.0}};
@@ -35,10 +38,11 @@ bool init_pos_irreg[cspect::BEACONS_NUM]     = {true, true, true, true }; /* Def
 bool callback_Dn_ctrl(contraspect_msgs::Dn_ctrl::Request  &req,			     
 		      contraspect_msgs::Dn_ctrl::Response &res);
 void callback_Triang(		const contraspect_msgs::Triang    ::ConstPtr &msg);
-void callback_Dn_status_map(    const contraspect_msgs::Status_map::ConstPtr &msg);
 
 void delaysCalc(double *Beacons_Delay, double *Beacons_Dist, double Map[][3], ros::Publisher
 		&Pub_Loc_sim_calc, const unsigned &Beacons_Num, const size_t &Cntr);
+
+void setvals_Dn_status_map(contraspect_msgs::Status_map &SM, double Map[][3]);
 
 int main(int argc, char **argv){
 
@@ -49,31 +53,58 @@ int main(int argc, char **argv){
   ros::init(argc, argv, "Loc_sim");
   ros::NodeHandle n;
   contraspect_msgs::Triang msg_Triang_demo;
-  ros::Subscriber sub_Triang, sub_Dn_status_map;
+  contraspect_msgs::Status_map srv_Dn_status_map;
+  ros::Subscriber sub_Triang;
    sub_Triang        = n.subscribe("Triang", cspect::SUBRATE, callback_Triang);
-   sub_Dn_status_map = n.subscribe(DNS     , cspect::SUBRATE, callback_Dn_status_map);
   ros::Publisher pub_Triang_demo, pub_Loc_sim_calc;
    pub_Triang_demo = n.advertise<contraspect_msgs::Triang>("Triang_demo", cspect::PUBRATE);
    pub_Loc_sim_calc= n.advertise        <std_msgs::String>("Loc_sim_calc",cspect::PUBRATE);
   ros::ServiceServer ser_Dn_ctrl;
    ser_Dn_ctrl = n.advertiseService("Dn_ctrl", callback_Dn_ctrl);
+  ros::ServiceClient cli_Dn_status_map;
+   cli_Dn_status_map = n.serviceClient<contraspect_msgs::Status_map>("Dn_status_map");
   /* ROS_INFO("Initialize node success"); */
 
   /* Initializing additional variables */
-  double moveSize = 0.0, DnPosArg = 0.0, distSumSq = 0.0;
-  size_t cntr = 0;
+  double moveSize = .0,
+    DnPosArg = .0,
+    distSumSq = .0,
+    dn_pos_recvd[3] = {.0,.0,.0},
+    distRecvdStord = .0,
+    argStatus = .0,
+    delay_error[4] = {.0,.0,.0,.0}; /* absval, percentage, mean, stdev */
+  size_t cntr = 0,
+    triang_cntr = 1;
   bool delay_recalc = false;
   
   /* Loop begin */
-  ros::Rate loopRate(pow(cspect::PERIOD, -1.0));
+  ros::Rate loopRate(pow(PERIOD, -1.0));
   while(ros::ok()){
+
+    /* Call Dn_status_map */
+    if(!(cntr%PERIOD_STATUS_MAP_CALL) && cli_Dn_status_map.call(srv_Dn_status_map)){
+      dn_pos_recvd[0] = srv_Dn_status_map.response.dx;
+      dn_pos_recvd[1] = srv_Dn_status_map.response.dy;
+      dn_pos_recvd[2] = srv_Dn_status_map.response.dz;
+      /* !!! IMPORTANT !!! Update Dn pos from Dn_status_map ONLY IF Dn moves significantly */
+      /* IE. reinitialized */
+      distRecvdStord = cspect::dist3D(dn_pos_recvd, map[0]);
+      argStatus = cspect::arg3D(status);
+      /* Check if received Dn pos significantly different from stored */
+      if(distRecvdStord/argStatus > 50.0*EPSILON && distRecvdStord > EPSILON){
+	ROS_INFO("Loc_sim says: dn_pos_recvd x,y,z=%f,%f,%f\n\t\t\t\tdn_pos_stord x,y,z=%f,%f,%f\n\t\t\t\tdist,status=%f,%f",dn_pos_recvd[0],dn_pos_recvd[1],dn_pos_recvd[2],map[0][0],map[0][1],map[0][2],distRecvdStord,argStatus);
+	ROS_INFO("Loc_sim says: callback_Dn_status_Map->Dn pos changed");
+	setvals_Dn_status_map(srv_Dn_status_map, map);
+      }
+    }else if(cntr%PERIOD_STATUS_MAP_CALL);
+    else ROS_ERROR("cli_Dn_status_map.call() fail.");
     
-    /* Adjust drone pos */
-    moveSize  = cspect::arg3D(status);
+    /* Adjust drone pos according to move command from DCS */
+    moveSize = cspect::arg3D(status);
     DnPosArg = cspect::arg3D(map[0]);
     for(size_t ii = 0; ii!= cspect::BEACONS_NUM; ii++)
       distSumSq = distSumSq + pow(beacons_dist[ii], 2.0);
-    if(!(cntr%cspect::P_10ms)){
+    if(!(cntr%PERIOD_DN_POS_ADJUST)){
       for(size_t ii = 0; ii!=3; ii++){
 	map[0][ii] = map[0][ii] + status[ii] * (pow(0.5, 6.0));
 	status[ii] = status[ii] - status[ii] * (pow(0.5, 6.0));
@@ -86,9 +117,9 @@ int main(int argc, char **argv){
     if(moveSize / DnPosArg > EPSILON) delay_recalc = true; /* If Dn move call from DCS */
     else if(distSumSq < pow(EPSILON, 2.0)) delay_recalc = true; /* If dists not yet adjusted */
     /* Calculate Triang msg fwd delays, publish Loc_sim_calc. Speed: 1Hz*/
-    if(delay_recalc && !(cntr%(cspect::P_10ms*100)))
+    if(delay_recalc && !(cntr%PERIOD_CALC_DELAYS))
       delaysCalc(beacons_delay, beacons_dist, map, pub_Loc_sim_calc, cspect::BEACONS_NUM, cntr);
-    else if(!delay_recalc && !(cntr%(cspect::P_10ms*100))) ROS_INFO("No delays recalc.");
+    else if(!delay_recalc && !(cntr%PERIOD_CALC_DELAYS)) ROS_INFO("No delays recalc.");
 
     /* Wait delay and publish to Triang_demo topic */
     for(size_t ii = 0; ii!= cspect::BEACONS_NUM; ii++)
@@ -100,18 +131,31 @@ int main(int argc, char **argv){
       else if( triang_recvd[ii] &&  triang_sent[ii]) triang_recvd[ii] = false;
       /* Waiting to send */
       else if( triang_recvd[ii] && !triang_sent[ii]){
-	/* Waiting to send, Add delay of size cspect::PERIOD */
+	/* Waiting to send, Add delay of size PERIOD */
 	if(delay_counter[ii]<beacons_delay[ii])
-	  delay_counter[ii] = delay_counter[ii] + cspect::PERIOD; 
-	/* Waited delay, send */
+	  delay_counter[ii] = delay_counter[ii] + PERIOD; 
+	/* Waited delay, SENDING TRIANG MSG WITH ADDED DELAY */
 	else{
 	  msg_Triang_demo.timestamp = recvd_timestamp[ii];
 	  msg_Triang_demo.bid = ii+1;
 	  pub_Triang_demo.publish(msg_Triang_demo);
 	  triang_sent[ii] = true;
-	  ROS_INFO("Triang %lu sent. Delays: Calc,Actual: %f,%f",
-		   ii+1, beacons_delay[ii], delay_counter[ii]);
+	  /* Calculating delay error statistics */
+	  /* Abs error */
+	  delay_error[0] = delay_counter[ii]-beacons_delay[ii];
+	  /* Percentage error */
+	  delay_error[1] = 100*delay_error[0]/delay_counter[ii];
+	  /* Mean error */
+	  delay_error[2] = (delay_error[2]*(triang_cntr-1)+delay_error[0])/triang_cntr;
+	  /* Stdev error */
+	  if(triang_cntr>1)
+	    delay_error[3] = sqrt((pow(delay_error[3],2.0)*(triang_cntr-2)
+				   +pow(delay_error[0]-delay_error[2],2.0))/(triang_cntr-1));
+	  ROS_INFO("Triang%lu sent. Delays:Calc,Actual,diff,%%diff,mean,stdev=%f,%f,%f,%f,%f,%f",
+		   ii+1, beacons_delay[ii], delay_counter[ii], delay_error[0],
+		   delay_error[1], delay_error[2], delay_error[3]);		   
 	  delay_counter[ii] = 0.0;
+	  triang_cntr = triang_cntr + 1;
 	}	  
       }
 
@@ -142,27 +186,13 @@ void callback_Triang(const contraspect_msgs::Triang::ConstPtr &msg){
       return;
   }
 }
-void callback_Dn_status_map(    const contraspect_msgs::Status_map::ConstPtr &msg){
-  if(msg){
-    double dn_pos_recvd[3] = {msg->dx, msg->dy, msg->dz};
-    /* !!! IMPORTANT !!! Update Dn pos from Dn_status_map ONLY IF Dn moves significantly */
-    /* IE. reinitialized */
-    double distRecvdStord = cspect::dist3D(dn_pos_recvd, map[0]),
-           argStatus = cspect::arg3D(status);
-    /* Check if received Dn pos significantly different from stored */
-    if(distRecvdStord/argStatus > 50.0*EPSILON && distRecvdStord > EPSILON){
-      ROS_INFO("Loc_sim says: dn_pos_recvd x,y,z=%f,%f,%f\n\t\t\t\tdn_pos_stord x,y,z=%f,%f,%f\n\t\t\t\tdist,status=%f,%f",dn_pos_recvd[0],dn_pos_recvd[1],dn_pos_recvd[2],map[0][0],map[0][1],map[0][2],distRecvdStord,argStatus);
-      map[0][0] = msg->dx;
-      map[0][1] = msg->dy;
-      map[0][2] = msg->dz;
-      ROS_INFO("Loc_sim says: callback_Dn_status_map->Dn pos changed");
-    }
-    map[1][0] = msg->b1x; map[1][1] = msg->b1y; map[1][2] = msg->b1z; 
-    map[2][0] = msg->b2x; map[2][1] = msg->b2y; map[2][2] = msg->b2z; 
-    map[3][0] = msg->b3x; map[3][1] = msg->b3y; map[3][2] = msg->b3z; 
-    map[4][0] = msg->b4x; map[4][1] = msg->b4y; map[4][2] = msg->b4z; 
-    /*ROS_INFO("callback_Dn_status_map");*/
-  }
+void setvals_Dn_status_map(contraspect_msgs::Status_map &SM, double Map[][3]){
+  Map[0][0] = SM.response.dx; Map[0][1] = SM.response.dy; Map[0][2] = SM.response.dz;
+  Map[1][0] = SM.response.b1x; Map[1][1] = SM.response.b1y; Map[1][2] = SM.response.b1z; 
+  Map[2][0] = SM.response.b2x; Map[2][1] = SM.response.b2y; Map[2][2] = SM.response.b2z; 
+  Map[3][0] = SM.response.b3x; Map[3][1] = SM.response.b3y; Map[3][2] = SM.response.b3z; 
+  Map[4][0] = SM.response.b4x; Map[4][1] = SM.response.b4y; Map[4][2] = SM.response.b4z; 
+  /*ROS_INFO("callback_Dn_status_map");*/
 }
 
 void delaysCalc(double *Beacons_Delay, double *Beacons_Dist, double Map[][3], ros::Publisher

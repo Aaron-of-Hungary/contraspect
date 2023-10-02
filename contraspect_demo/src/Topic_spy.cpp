@@ -32,7 +32,7 @@ std::string activeTopic_str(enum tType &ActiveTopic);
 ros::Subscriber activeTopic_rossub(enum tType &ActiveTopic, ros::NodeHandle &N);
 ros::ServiceServer activeTopic_rosser(enum tType &ActiveTopic, ros::NodeHandle &N);
 
-void callback_Dn_status_map(	const contraspect_msgs::Status_map::ConstPtr &msg   ); 
+//void callback_Dn_status_map(	const contraspect_msgs::Status_map::ConstPtr &msg   ); 
 void callback_Dn_calc(		const std_msgs::String::ConstPtr &msg	     	    ); 
 void callback_Loc_sim_calc(	const std_msgs::String::ConstPtr &msg		    ); 
 void callback_CLK(		const contraspect_msgs::CLK::ConstPtr &msg	    ); 
@@ -128,7 +128,7 @@ std::string activeTopic_str(enum tType &ActiveTopic) {
 ros::Subscriber activeTopic_rossub(enum tType &ActiveTopic, ros::NodeHandle &N){
   switch (ActiveTopic){
   case Dn_calc:       return N.subscribe("Dn_calc"      ,cspect::SUBRATE,callback_Dn_calc      );
-  case Dn_status_map: return N.subscribe("Dn_status_map",cspect::SUBRATE,callback_Dn_status_map);
+    //case Dn_status_map: return N.subscribe("Dn_status_map",cspect::SUBRATE,callback_Dn_status_map);
   case Loc_sim_calc:  return N.subscribe("Loc_sim_calc" ,cspect::SUBRATE,callback_Loc_sim_calc );
   case CLK: 	      return N.subscribe("CLK"          ,cspect::SUBRATE,callback_CLK          );
   case Triang: 	      return N.subscribe("Triang"       ,cspect::SUBRATE,callback_Triang       );
@@ -148,7 +148,7 @@ ros::ServiceServer activeTopic_rosser(enum tType &ActiveTopic, ros::NodeHandle &
                      return N.advertiseService(""            , callback_Dn_ctrl      );
   }
 }
-
+/* //
 void callback_Dn_status_map(	const contraspect_msgs::Status_map::ConstPtr &msg){
   if(msg){
     std::stringstream ss;
@@ -162,7 +162,7 @@ void callback_Dn_status_map(	const contraspect_msgs::Status_map::ConstPtr &msg){
     std::string s = ss.str();
     ROS_INFO("%s",s.c_str());
   }
-}
+  }*/
 void callback_Dn_calc(		const std_msgs::String::ConstPtr &msg){
   if(msg){
     std::stringstream ss;

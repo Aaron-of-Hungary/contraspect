@@ -21,25 +21,32 @@ int main(int argc, char **argv){
   std::stringstream ss;
   std::string s;
   bool demo = false;
+  size_t IMAX = cspect::BEACONS_NUM+2;
 
-  if(argc > 1) demo = true;  
+  if(argc > 1){
+    demo = true;
+    IMAX++;
+  }
   
-  for(size_t ii=0; ii!=cspect::BEACONS_NUM+2; ii++){
+  
+  for(size_t ii=0; ii!=IMAX; ii++){
     ss.str("");
     
     ss << "gnome-terminal --tab --title \"";    
-    if(ii==0) ss << "Dn";
-    else if(ii==cspect::BEACONS_NUM+1) ss << "DCS-B";
-    else ss << "B" << (int)ii;
+    if(ii==0) ss << "DCS-B";
+    else if(ii==1) ss << "Dn";
+    else if(ii==cspect::BEACONS_NUM+2) ss << "Loc_sim";
+    else ss << "B" << (int)ii-1;
     
-    ss << "\" -- bash -c \"rosrun contraspect ";    
-    if(ii==0) ss << "Dn_node";
-    else if(ii==cspect::BEACONS_NUM+1) ss << "Dcs_node B";
-    else ss << "Beacon_node " << (int)ii;
+    ss << "\" -- bash -c \"rosrun contraspect";    
+    if(ii==0) ss << " Dcs_node B";
+    else if(ii==1) ss << " Dn_node";
+    else if(ii==cspect::BEACONS_NUM+2) ss << "_demo Loc_sim";
+    else ss << " Beacon_node " << (int)ii-1;
 
-    if(ii<cspect::BEACONS_NUM+1)
-      for(size_t jj=0; jj!=3; jj++) ss << ' ' << std::to_string(INIT_COORDS[ii][jj]);
-    if(demo && ii==0) ss << " demo";
+    if(ii!=cspect::BEACONS_NUM+2 && ii!=0)
+      for(size_t jj=0; jj!=3; jj++) ss << ' ' << std::to_string(INIT_COORDS[ii-1][jj]);
+    if(demo && ii==1) ss << " demo";
     
     ss <<"; exec bash\"";
     s = ss.str();

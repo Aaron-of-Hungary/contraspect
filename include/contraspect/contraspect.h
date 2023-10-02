@@ -26,7 +26,7 @@ namespace cspect {
   /**/		     /* Added weight (eg. SNR) of beacons:	         */
   /**/		     BEACONS_WEIGHT[BEACONS_NUM] = {1.0,1.0,1.0,1.0},  /**/
   /**/		     /* Clk Sync frequency [Hz] for Bcns, Drone, DCS-B:	 */
-  /**/		     CLK_SYNC_FREQ = 10.0; 	    	  	       /**/
+  /**/		     CLK_SYNC_FREQ = 1.0; 	    	  	       /**/
   /***********************************************************************/
   /***********************************************************************/
 
