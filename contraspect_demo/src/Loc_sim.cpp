@@ -74,7 +74,8 @@ int main(int argc, char **argv){
     argStatus = .0,
     delay_error[4] = {.0,.0,.0,.0}; /* absval, percentage, mean, stdev */
   size_t cntr = 0,
-    triang_cntr = 1;
+    triang_cntr = 1,
+    delay_recalc_cntr = 0;
   bool delay_recalc = false;
   
   /* Loop begin */
@@ -116,9 +117,12 @@ int main(int argc, char **argv){
     delay_recalc = false;
     if(moveSize / DnPosArg > EPSILON) delay_recalc = true; /* If Dn move call from DCS */
     else if(distSumSq < pow(EPSILON, 2.0)) delay_recalc = true; /* If dists not yet adjusted */
+    else if(delay_recalc_cntr > PERIOD_CALC_DELAYS) delay_recalc = true; /* time elapsed */
     /* Calculate Triang msg fwd delays, publish Loc_sim_calc. Speed: 1Hz*/
-    if(delay_recalc && !(cntr%PERIOD_CALC_DELAYS))
-      delaysCalc(beacons_delay, beacons_dist, map, pub_Loc_sim_calc, cspect::BEACONS_NUM, cntr);
+      if(delay_recalc && !(cntr%PERIOD_CALC_DELAYS)){
+	delaysCalc(beacons_delay,beacons_dist, map, pub_Loc_sim_calc, cspect::BEACONS_NUM, cntr);
+	delay_recalc_cntr = 0;
+      }
     else if(!delay_recalc && !(cntr%PERIOD_CALC_DELAYS)) ROS_INFO("No delays recalc.");
 
     /* Wait delay and publish to Triang_demo topic */
@@ -163,6 +167,7 @@ int main(int argc, char **argv){
     ros::spinOnce();
     loopRate.sleep();
     cntr = cntr + 1;
+    delay_recalc_cntr = delay_recalc_cntr + 1;
   }
   return 0;
 }

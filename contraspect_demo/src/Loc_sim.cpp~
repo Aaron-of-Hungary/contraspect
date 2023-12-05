@@ -148,9 +148,10 @@ int main(int argc, char **argv){
 	  /* Mean error */
 	  delay_error[2] = (delay_error[2]*(triang_cntr-1)+delay_error[0])/triang_cntr;
 	  /* Stdev error */
-	  delay_error[3] = sqrt((pow(delay_error[3],2.0)*(triang_cntr-2)
-				 +pow(delay_error[0]-delay_error[2],2.0))/(triang_cntr-1));
-	  ROS_INFO("Triang%lu sent. Delays:Calc,Actual,diff,\%diff,mean,stdev=%f,%f,%f,%f,%f,%f",
+	  if(triang_cntr>1)
+	    delay_error[3] = sqrt((pow(delay_error[3],2.0)*(triang_cntr-2)
+				   +pow(delay_error[0]-delay_error[2],2.0))/(triang_cntr-1));
+	  ROS_INFO("Triang%lu sent. Delays:Calc,Actual,diff,%%diff,mean,stdev=%f,%f,%f,%f,%f,%f",
 		   ii+1, beacons_delay[ii], delay_counter[ii], delay_error[0],
 		   delay_error[1], delay_error[2], delay_error[3]);		   
 	  delay_counter[ii] = 0.0;

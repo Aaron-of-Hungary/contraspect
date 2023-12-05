@@ -29,8 +29,8 @@ constexpr unsigned PERIOD_DN_POS_CALC = cspect::P_10ms*10, /* droneposcalc, pub_
 
 /* Init global vars */
 float clk = .0;
+std::array<double, BN> beacons_delay = {.0,.0,.0,.0};
 double map[BN+1][3] = {{.0,.0,.0},{.0,.0,.0},{.0,.0,.0},{.0,.0,.0},{.0,.0,.0}},
-  beacons_delay[BN] = {.0,.0,.0,.0},
   beacons_dist [BN] = {.0,.0,.0,.0},
   status       [3] = {.0,.0,.0},
   base_delay   [7] = {.0,.0,.0,.0,1.0,.0,.0};/* Min, Max, Mean, Stdev, Absmin, Absmax, AbsMean */
@@ -50,9 +50,8 @@ bool callback_Dn_status_map(contraspect_msgs::Status_map::Request  &req,
 			    
 unsigned argvParse(int &Argc, char **Argv, bool &Demo, std::stringstream &SS,
 		   double Map[BN+1][3]);
-unsigned dronePosCalc(double Delays[BN], const unsigned &Delays_vector_size,
-		      std::vector<std::array<double,BN>> &delays_vector, double *Dists,
-		      double Map[BN+1][3],
+unsigned dronePosCalc(const unsigned& Delays_vector_size,double *Delays_avgs,double Map[BN+1][3],
+		      std::vector<std::array<double,BN>> &Delays_vector, double *Dists,
 		      ros::Publisher &Pub_Dn_calc, const double W[BN], std::stringstream &SS);
 
 int main(int argc, char **argv){
@@ -97,6 +96,7 @@ int main(int argc, char **argv){
   /* Initialize other variables */
   contraspect_msgs::Clk_sync srv_Clk_sync;
   char c;
+  double delays_avgs[BN];
 
   /* Loop begin */
   ros::Rate loopRate(pow(PERIOD, -1.0));
@@ -122,24 +122,32 @@ int main(int argc, char **argv){
       }
       else ROS_ERROR("Dn Clk_sync adjust fail");
     }
-    
-    /* Calculate position and publish to Dn_calc topic triang msgs arrived from all 4 bcns */
-    if(!(cntr%PERIOD_DN_POS_CALC)){
-      ROS_INFO("triang_recvd:%d%d%d%d%d",(int)triang_recvd[0],(int)triang_recvd[1],
-	       (int)triang_recvd[2],(int)triang_recvd[3],(int)triang_recvd[4]);
-      if(triang_recvd[0]){
-	for(size_t ii = 0; ii!=BN+1; ii++) triang_recvd[ii] = false;
-	if(dronePosCalc(beacons_delay,DELAYS_VECTOR_SIZE,delays_vector,beacons_dist,map,
+
+    /* Triang msgs arrived from all 4 bcns */
+    if(triang_recvd[0]){
+      /* Reset triang_recvd array */
+      for(size_t ii = 0; ii!=BN+1; ii++) triang_recvd[ii] = false;
+      /* Add received delays data to delays_vector */
+      delays_vector.push_back(beacons_delay);
+      /* Cycle delays_vector, keep at desired size by deleting oldest value */
+      if(delays_vector.size()>DELAYS_VECTOR_SIZE) delays_vector.erase(delays_vector.begin());
+      /* Calculate position and publish to Dn_calc topic */
+      if(!(cntr%PERIOD_DN_POS_CALC)){
+	/* ROS_INFO("triang_recvd:%d%d%d%d%d",(int)triang_recvd[0],(int)triang_recvd[1],
+	   (int)triang_recvd[2],(int)triang_recvd[3],(int)triang_recvd[4]);*/
+	// Add avgs array
+	if(dronePosCalc(DELAYS_VECTOR_SIZE,delays_avgs,map,delays_vector,beacons_dist,
 			pub_Dn_calc,cspect::BEACONS_WEIGHT,ss))
-	  ROS_ERROR("dronePosCalc ERROR");      
+	  ROS_ERROR("dronePosCalc ERROR");
       }
     }
 
     /* Display base delay data */
     if(!(cntr%(cspect::P_10ms*100)))
       ROS_INFO
-	("Base delay\tmin,max,mean,stdev=%f,%f,%f,%f\n\t\t\t\t\t\tabsmin,absmax,absmean,cntr=%f,%f,%f,%lu", base_delay[0],base_delay[1],base_delay[2],base_delay[3],
-	   base_delay[4],base_delay[5],base_delay[6],triang_cntr);
+	("Base delay %lu\tmin,max,mean,stdev=%f,%f,%f,%f || absmin,absmax,absmean=%f,%f,%f",
+	 triang_cntr  ,base_delay[0],base_delay[1],base_delay[2],
+	 base_delay[3],base_delay[4],base_delay[5],base_delay[6]);
 
     /* Shift clk */
     if(clk>2048.0-PERIOD) clk = clk-2048.0+PERIOD; else clk = clk + PERIOD;
@@ -170,10 +178,10 @@ void callback_Triang(const contraspect_msgs::Triang::ConstPtr& msg){
       for(size_t ii = 1; ii!=BN+1; ii++)
 	if(!triang_recvd[ii]) triang_recvd[0] = false;
       /* Ros Info regarding set delay */
-      ROS_INFO("callback_Triang. delay[%d]=Dn.clk-msg.tmstp=%f-%f=%f", 
-	       msg->bid,clk, msg->timestamp,beacons_delay[msg->bid-1]);
+      /*ROS_INFO("callback_Triang. delay[%d]=Dn.clk-msg.tmstp=%f-%f=%f", 
+	       msg->bid,clk, msg->timestamp,beacons_delay[msg->bid-1]);*/
 
-      /* Measure base delay (MIN,MAX,MEAN,STDEV,ABSMIN,ABSMAX,ABSMEAN) */
+      /* Analytics: Measure base delay (MIN,MAX,MEAN,STDEV,ABSMIN,ABSMAX,ABSMEAN) */
       /* set min */
       if(beacons_delay[msg->bid-1]<base_delay[0])
 	base_delay[0] = beacons_delay[msg->bid-1];
@@ -267,27 +275,25 @@ bool callback_Dn_status_map(contraspect_msgs::Status_map::Request  &req,
   return true;
 }
 
-unsigned dronePosCalc(double Delays[BN], const unsigned&Delays_vector_size,
+unsigned dronePosCalc(const unsigned& Delays_vector_size,double *Delays_avgs,double Map[BN+1][3],
 		      std::vector<std::array<double,BN>> &Delays_vector, double *Dists,
-		      double Map[BN+1][3],
 		      ros::Publisher &Pub_Dn_calc, const double W[BN], std::stringstream &SS){
   /* BN: Beacons_Num, W: Beacon_Weight */
+  /* Check delays vector size */
+  if(Delays_vector_size!=Delays_vector.size()) {
+    ROS_ERROR("dronePosCalc error, delays vector wrong size.");
+    return 1;
+  }
   /* Initializing delays_vector. */
-  /* We assume dronePosCalc() only executed when Delays array filled with fresh unused vals */
-  std::array<double, BN> delaysArray; //
-  for (size_t ii = 0; ii != BN; ++ii) delaysArray[ii] = Delays[ii];
-  Delays_vector.push_back(delaysArray);
-  /* Keep delays_vector at desired size by deleting oldest value */
-  if(Delays_vector.size()>Delays_vector_size) Delays_vector.erase(Delays_vector.begin());
   /* set new delays as the average of previous received delays who number Delays_vector_size */
   for(size_t ii = 0; ii!=BN; ii++) {
-    Delays[ii]=.0;
+    Delays_avgs[ii]=.0;
     for(size_t jj = 0; jj!=Delays_vector.size(); jj++)
-      Delays[ii] = Delays[ii] + Delays_vector[jj][ii];
-    Delays[ii] = Delays[ii] / Delays_vector.size();
-  }  
+      Delays_avgs[ii] = Delays_avgs[ii] + Delays_vector[jj][ii];
+    Delays_avgs[ii] = Delays_avgs[ii] / Delays_vector.size();
+  }
   /* Calculate bcn dist from bcn delay */ 
-  for(size_t ii = 0; ii!=BN; ii++) Dists[ii] = cspect::SPEEDOFSOUND * Delays[ii];
+  for(size_t ii = 0; ii!=BN; ii++) Dists[ii] = cspect::SPEEDOFSOUND * Delays_avgs[ii];
   /*ROS_INFO("Calculate Bcn dist from delay success");*/ 
   /* Calculate dn pos from bcn dist.  d^2 = (xdn-xb)^2 + (ydn-yb)^2 + (zdn-zb)^2 */ 
   Eigen::MatrixXd mtxA(BN-1, 3); // this might break it. if yes, initialize matrices properly
@@ -322,10 +328,10 @@ unsigned dronePosCalc(double Delays[BN], const unsigned&Delays_vector_size,
   SS.str("");
   cspect::ssEnd(SS);
   SS << "\nBeacon delays received via Triang topic."
-     << "\n\tB1: " << std::to_string(Delays[0])
-     <<   "\tB2: " << std::to_string(Delays[1])
-     <<   "\tB3: " << std::to_string(Delays[2])
-     <<   "\tB4: " << std::to_string(Delays[3]);
+     << "\n\tB1: " << std::to_string(Delays_avgs[0])
+     <<   "\tB2: " << std::to_string(Delays_avgs[1])
+     <<   "\tB3: " << std::to_string(Delays_avgs[2])
+     <<   "\tB4: " << std::to_string(Delays_avgs[3]);
   SS << "\nBeacon distances calculated from delays."
      << "\n\t[d1,d2,d3,d4] = ["
      << Dists[0] << ", " << Dists[1] << ", " << Dists[2] << ", " << Dists[3] << "]";
@@ -368,6 +374,6 @@ unsigned dronePosCalc(double Delays[BN], const unsigned&Delays_vector_size,
   std_msgs::String msg_Dn_calc;
   msg_Dn_calc.data = SS.str();
   Pub_Dn_calc.publish(msg_Dn_calc);
-  ROS_INFO("pub_Dn_calc");
+  /*ROS_INFO("pub_Dn_calc");*/
   return 0;
 }

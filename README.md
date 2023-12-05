@@ -50,78 +50,32 @@ What doesn't work:
 Triang added delay
 Beacon and Drone CLKs sync together
 
-* Check dn-bcns clk-sync quality from dcs-b adjustment data as a function of clk_sync-freq /* to jegyzokonyv */
-* Connect dronePosCalc,Dn_status_map frequency, change to use average delay over past x triang_recvd. Have calc,Status_map frequency and x both be function of speed/accuracy setting variable -> Heisenberg uncertainty principle!! /* to jegyzokonyv */
-* Then see how we can correct the base delay.
-* Try shifting pubrate and subrate.
-* Check Demo Dn_calc -> DCS-B -> DCS-C
-* Lessening ros master load by ceasing all high frequency publishing except Triang.
-* Changing speedofsound.
-* Check accuracy of Loc_sim added delays
-* At 10Hz, Compare Loc_sim added Triang delay and Dn measured Triang delay
-* dronePosCalc: compare map, w arrays size to N. no more, no less.
-* If Dn_calc AND Loc_sim delay -> Dn delay fully reliable: dronePosCalc assign map[0] values
-* Make Dn_node execute dronePosCalc, Loc_sim execute delaysCalc at 10Hz -> Dn_status_map at 20Hz
-* Loc_sim alters delays to Dcs_C but all uniformly. Fix.
-* Now if need be cls for Topic_spy_*_calc
-* First complete demo mode
-* Dn_node non Demo mode move from Dn_ctrl
-* Rewrite Loc_sim Dn_node and Bcn_node info.txt(x2): omit init order
-* Rewrite all nodes to reflect services, new variables, etc
-* Create overview diagram with full explanation of function
-* Instructions: at least 3 NON-COPLANAR (and non-colinear) homing beacons
-* Edit in graph: Loc_sim no sub Bcn_init_pos
+- Export DCS-B adjust data, matlab visualize. Vary CLK_SYNC_FREQ, optimize. Check true CLK_sync_freqas function of clk_sync_freq variable /* to jegyzokonyv */
+- Delays_vector_size a function of new .h "pos_calc_precision" var and period_dn_pos_calc. period_dn_pos_calc in turn a function of new .h "pos_calc_speed" var. performance (base delay) stats as function of precision and speed, matlab, find optimal /* to jegyzokonyv */
+- Further ideas to improve base delay: shift pubrate,subrate, find and kill high freq publishing, instead of base delay target Loc_sim sent vs Dn_node recvd delay discrepancy, finally if no other option, decrease speedofsound
+- Demo test: Dn_calc -> DCS-B -> DCS-C
+- Fix accuracy of Loc_sim added delays
+- If Dn_calc AND Loc_sim->Dn delay fully reliable: dronePosCalc assign map[0] values
+- Loc_sim alters delays to Dcs_C but all uniformly. Fix.
+- Big Dn_calc issue: calculated position doesn't really correspond to distances!! Eg. distances 8,9,8,8, position z value: 100?? Do control reverse calculation to test Dn_calc validity. If not valid fix error.
+- To readme: how install curses.h, Eigen/Dense packages
+- After demo mode complete: Dn_node non Demo mode move from Dn_ctrl
+- Edit in graph: Loc_sim no sub Bcn_init_pos
+- OPTNL: Rewrite all txt files
+- OPTNL: Create overview diagram with full explanation
 
 SZD
 UWB AdA/AoD módszer
 Vik Vizsgaszabályzat záróvizsgára bocsájtás feltételei, szakdolgozat követelmények
 VIK HK
 
-git commit -m "contraspect-20th-commit. Tested-and-working. Init-demo-added-start-Loc_sim. Added-diagnostic-tools-Dn_node-base-delay-DCS-B-Adjust-Loc_sim-delay-error. Dn_status_map-Changed-msg-to-srv. DCS-A-changed-publish-speed. DCS-B-and-Dn-base_delay-added-standard-deviation-measure-diagnostic. Cleaned-up-period-constants. dronePosCalc-change-now-calculate-position-from-avg-of-last-X-delays."
+git commit -m "contraspect-21st-commit. Decreased-Speedofsound-to-34.3-m/s. Loc-sim-calc-more-frequently. Beacon-delays-stored-as-average-of-last-n-measured-delay-values. Tested-and-working. Accurately-calculates-Dn-position-but-some-error-and-constantly-increasing-dist-from-beacons. Need-fix."
 
 # Timeline
-May 2023 - Project begun.
-
-# DEMO step-by-step
-1. Running the system in normal (not demo) mode
-- To demonstrate node and topic architecture via rqt graph
-1.1 roscore
-1.2 rosrun contraspect Dcs_node A
-1.3 rosrun rviz rviz
-D.4 rosrun contraspect_demo Loc_sim
-1.4 rosrun contraspect Dn_node	     1.0 1.0 1.0
-1.5 rosrun contraspect Beacon_node 1 0.0 0.0 0.0 
-    rosrun contraspect Beacon_node 2 0.0 2.0 0.0 
-    rosrun contraspect Beacon_node 3 2.0 2.0 0.0 
-    rosrun contraspect Beacon_node 4 2.0 0.0 0.0
-1.6 rosrun rqt_graph   rqt_graph
-- Show all the nodes working properly and interacting
-- Explain the function of each node and topic
-1.7 rosrun contraspect Contraspect_info Dn_node
-    rosrun contraspect Contraspect_info Beacon_node
-    rosrun contraspect Contraspect_info Dcs_node
-    close last 3
-- Explain how the drone would calculate its position from the beacon delays
-1.8 rosrun contraspect Dcs_node B
-1.9 rosrun contraspect_demo Topic_spy Dn_calc
-- Explain the issue with the time delay and how to fix
-2. Running the system in demo mode
-- To demonstrate full and proper functioning of the system
-2.1 shut down Dn_node and Beacon_nodes
-2.2 rosrun contraspect 	    Dn_node	  1.0 1.0 1.0 demo
-2.3 rosrun contraspect_demo Loc_sim
-2.3 rosrun contraspect 	    Beacon_node 1 0.0 0.0 0.0 
-    rosrun contraspect 	    Beacon_node 2 0.0 2.0 0.0 
-    rosrun contraspect 	    Beacon_node 3 2.0 2.0 0.0 
-    rosrun contraspect 	    Beacon_node 4 2.0 0.0 0.0
-2.4 rosrun contraspect	    Dcs_node B
-- Show RQT Graph and explain
-- Show all the nodes working properly and interacting
-- Explain the function of each node and topic
-2.5 rosrun contraspect_demo Contraspect_demo_info Loc_sim
-    rosrun contraspect_demo Contraspect_demo_info Topic_spy
-    close last 2
-2.6 rosrun contraspect_demo Topic_spy Loc_sim_calc
+May 2023 - Project begin
+Jul 2023 - Concept complete
+Aug 2023 - Code scaffold
+Sep 2023 - Running
 
 # PACKAGES
 contraspect

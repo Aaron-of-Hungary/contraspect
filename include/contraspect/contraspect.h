@@ -20,7 +20,7 @@ namespace cspect {
   constexpr unsigned SUBRATE      = 1000,  /* def 1000			 */
   /**/	  	     PUBRATE      = 1000,  /* def 1000 			 */
   /**/  	     BEACONS_NUM  = 4;     /* WILL BREAK IF NOT FOUR	 */
-  constexpr double   SPEEDOFSOUND = 343.0, /* in air, room temp: 343 m/s */
+  constexpr double   SPEEDOFSOUND = 34.30, /* in air, room temp: 343 m/s */
   /**/		     /* Minimum Drone position resolution in meters:	 */
   /**/		     MINRES	  = 0.1,       		     	       /**/
   /**/		     /* Added weight (eg. SNR) of beacons:	         */
